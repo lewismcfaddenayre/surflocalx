@@ -1,6 +1,6 @@
-import { useMemo, useRef, useState, type DragEvent, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import plan from "./data/pgl.json";
-import { loadAuth, saveAuth, updateJiraIssue, type JiraAuth } from "./jira";
+import { loadJiraStatuses, updateJiraIssue } from "./jira";
 
 type Owner = "lewis" | "alok" | "other";
 type Issue = {
@@ -54,12 +54,16 @@ function sprintFor(iso: string) {
   return plan.sprints.find((s) => iso >= s.start && iso <= s.end)?.id ?? "";
 }
 
+function statusClass(status: string) {
+  return status.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "unknown";
+}
+
 function matches(issue: Issue, q: string, owner: "all" | Owner, sprint: string) {
   if (issue.sprintEpic) return false;
   if (owner !== "all" && issue.owner !== owner) return false;
   if (sprint !== "all" && issue.sprint !== sprint) return false;
   if (!q) return true;
-  const hay = `${issue.key} ${issue.summary} ${issue.assignee}`.toLowerCase();
+  const hay = `${issue.key} ${issue.summary} ${issue.assignee} ${issue.status}`.toLowerCase();
   return hay.includes(q);
 }
 
@@ -74,13 +78,10 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Issue | null>(null);
   const [expand, setExpand] = useState<Record<string, boolean>>({});
-  const [auth, setAuth] = useState<JiraAuth | null>(() => (typeof localStorage === "undefined" ? null : loadAuth()));
-  const [showAuth, setShowAuth] = useState(false);
-  const [email, setEmail] = useState(auth?.email ?? "");
-  const [token, setToken] = useState(auth?.token ?? "");
   const [toast, setToast] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [dropOn, setDropOn] = useState<string | null>(null);
+  const [statusSync, setStatusSync] = useState<"idle" | "loading" | "ok" | "error">("idle");
   const dragged = useRef(false);
 
   const visible = useMemo(() => {
@@ -152,18 +153,30 @@ export default function App() {
     setSelected((cur) => (cur?.key === key ? { ...cur, ...patch } : cur));
   }
 
+  async function refreshStatuses() {
+    setStatusSync("loading");
+    try {
+      const live = await loadJiraStatuses();
+      const byKey = new Map(live.map((row) => [row.key, row.status]));
+      setItems((prev) => prev.map((issue) => (byKey.has(issue.key) ? { ...issue, status: byKey.get(issue.key) as string } : issue)));
+      setSelected((cur) => (cur && byKey.has(cur.key) ? { ...cur, status: byKey.get(cur.key) as string } : cur));
+      setStatusSync("ok");
+    } catch (err) {
+      setStatusSync("error");
+      flash(err instanceof Error ? err.message : "Could not load Jira statuses");
+    }
+  }
+
+  useEffect(() => {
+    void refreshStatuses();
+  }, []);
+
   async function commitMove(key: string, nextDay: string, nextOwner?: Owner) {
     const current = itemsRef.current.find((i) => i.key === key);
     if (!current || current.sprintEpic) return;
     const sameDay = (current.start || current.due) === nextDay;
     const sameOwner = !nextOwner || nextOwner === current.owner;
     if (sameDay && sameOwner) return;
-
-    if (!auth) {
-      setShowAuth(true);
-      flash("Connect Jira to save moves");
-      return;
-    }
 
     const prev = {
       start: current.start,
@@ -180,7 +193,7 @@ export default function App() {
     applyLocal(key, { start: nextDay, due: nextDay, sprint: nextSprint, ...ownerPatch });
     setBusy(key);
     try {
-      await updateJiraIssue(auth, {
+      await updateJiraIssue({
         key,
         start: nextDay,
         due: nextDay,
@@ -209,23 +222,6 @@ export default function App() {
     };
   }
 
-  function connect(e: FormEvent) {
-    e.preventDefault();
-    const next = { email: email.trim(), token: token.trim() };
-    if (!next.email || !next.token) return;
-    saveAuth(next);
-    setAuth(next);
-    setShowAuth(false);
-    flash("Jira connected · drag a chip to move it");
-  }
-
-  function disconnect() {
-    saveAuth(null);
-    setAuth(null);
-    setToken("");
-    flash("Jira disconnected");
-  }
-
   return (
     <div className="page">
       <header className="top">
@@ -238,8 +234,11 @@ export default function App() {
           </p>
         </div>
         <div className="links">
-          <button type="button" className={auth ? "ok" : ""} onClick={() => setShowAuth((v) => !v)}>
-            {auth ? "Jira connected" : "Connect Jira"}
+          <span className={`ok ${statusSync === "ok" ? "on" : ""}`}>
+            {statusSync === "loading" ? "Syncing Jira…" : statusSync === "ok" ? "Jira live" : statusSync === "error" ? "Jira sync failed" : "Jira"}
+          </span>
+          <button type="button" onClick={() => void refreshStatuses()} disabled={statusSync === "loading"}>
+            Refresh statuses
           </button>
           <a href={plan.jira} target="_blank" rel="noreferrer">
             PGL board
@@ -249,38 +248,6 @@ export default function App() {
           </a>
         </div>
       </header>
-
-      {showAuth && (
-        <form className="connect" onSubmit={connect}>
-          <p>
-            Paste an Atlassian API token from{" "}
-            <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank" rel="noreferrer">
-              id.atlassian.com
-            </a>
-            . It stays in this browser and is sent only to this app’s Jira proxy. Writes Start date, Due date,
-            sprint labels, and assignee.
-          </p>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Atlassian email" autoComplete="username" />
-          <input
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            placeholder="API token"
-            type="password"
-            autoComplete="current-password"
-          />
-          <div className="connect-actions">
-            <button type="submit">Save & connect</button>
-            {auth && (
-              <button type="button" onClick={disconnect}>
-                Disconnect
-              </button>
-            )}
-            <button type="button" onClick={() => setShowAuth(false)}>
-              Close
-            </button>
-          </div>
-        </form>
-      )}
 
       <section className="sprints">
         {plan.sprints.map((s) => (
@@ -331,14 +298,25 @@ export default function App() {
       </div>
 
       <div className="legend">
-        <span className="chip lewis tiny">Lewis</span>
-        <span className="chip alok tiny">Alok</span>
-        <span className="chip lewis tiny critical">Critical</span>
-        <span>Drag to a day writes Jira. Gold ring = Blocks chain.</span>
+        <span className="chip lewis tiny">
+          <span className="chip-key">Lewis</span>
+          <span className="chip-title">title</span>
+          <span className="chip-st">status</span>
+        </span>
+        <span className="chip alok tiny">
+          <span className="chip-key">Alok</span>
+          <span className="chip-title">title</span>
+          <span className="chip-st">status</span>
+        </span>
+        <span className="chip lewis tiny critical">
+          <span className="chip-key">Critical</span>
+          <span className="chip-st">gold ring</span>
+        </span>
+        <span>Pills show key, title, and Jira status. Drag to a day writes Jira.</span>
       </div>
 
       <div className="scroller">
-        <div className="chart" style={{ gridTemplateColumns: `168px repeat(${days.length}, minmax(52px, 1fr))` }}>
+        <div className="chart" style={{ gridTemplateColumns: `168px repeat(${days.length}, minmax(96px, 1fr))` }}>
           <div className="corner sticky">Track</div>
           {days.map((d) => (
             <div
@@ -393,6 +371,10 @@ export default function App() {
             <div>
               <dt>Owner</dt>
               <dd>{selected.assignee}</dd>
+            </div>
+            <div>
+              <dt>Status</dt>
+              <dd className={`st-${statusClass(selected.status)}`}>{selected.status}</dd>
             </div>
             <div>
               <dt>Date</dt>
@@ -501,7 +483,7 @@ function Lane({
                 key={issue.key}
                 draggable
                 className={`chip ${issue.owner} ${issue.critical ? "critical" : ""} ${selectedKey === issue.key ? "sel" : ""} ${busy === issue.key ? "busy" : ""}`}
-                title={`${issue.key} ${issue.summary} · drag to move`}
+                title={`${issue.key} ${issue.summary} · ${issue.status} · drag to move`}
                 onDragStart={(e) => {
                   onDragFlag();
                   e.dataTransfer.setData("text/pgl-key", issue.key);
@@ -510,7 +492,9 @@ function Lane({
                 }}
                 onClick={() => onSelect(issue)}
               >
-                {issue.key.replace("PGL-", "")}
+                <span className="chip-key">{issue.key.replace("PGL-", "")}</span>
+                <span className="chip-title">{issue.summary}</span>
+                <span className={`chip-st st-${statusClass(issue.status)}`}>{issue.status}</span>
               </button>
             ))}
             {more > 0 && (

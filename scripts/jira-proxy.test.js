@@ -8,34 +8,47 @@ assert(sprintLabel("2026-09-07") === "pgl-sprint-1", "week 1");
 assert(sprintLabel("2026-09-14") === "pgl-sprint-2", "week 2");
 assert(sprintLabel("2026-09-21") === "pgl-sprint-3", "week 3");
 
-const method = await handleJiraRequest({ method: "GET", body: "{}", authorization: "Basic abc" });
-assert(method.status === 405, "POST only");
+delete process.env.JIRA_API_TOKEN;
+const missing = await handleJiraRequest({ method: "GET", body: "" });
+assert(missing.status === 503, "token required");
 
-const unauth = await handleJiraRequest({ method: "POST", body: '{"key":"PGL-1"}', authorization: "" });
-assert(unauth.status === 401, "needs Basic auth");
+process.env.JIRA_EMAIL = "lewis@surflocalexchange.com";
+process.env.JIRA_API_TOKEN = "test-token";
+
+const method = await handleJiraRequest({ method: "PUT", body: "{}" });
+assert(method.status === 405, "GET or POST only");
 
 const badKey = await handleJiraRequest({
   method: "POST",
   body: '{"key":"ABC-1","start":"2026-09-08"}',
-  authorization: "Basic dGVzdDp0b2tlbg==",
 });
 assert(badKey.status === 400 && /PGL/.test(badKey.json.error), "PGL only");
 
 const empty = await handleJiraRequest({
   method: "POST",
   body: '{"key":"PGL-1"}',
-  authorization: "Basic dGVzdDp0b2tlbg==",
 });
 assert(empty.status === 400, "nothing to update");
 
 let fetches = 0;
 globalThis.fetch = async (url, init) => {
   fetches += 1;
+  if (String(url).includes("search/jql")) {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        isLast: true,
+        issues: [{ key: "PGL-109", fields: { status: { name: "In Progress" } } }],
+      }),
+      text: async () => "",
+    };
+  }
   if (String(url).includes("fields=")) {
     return {
       ok: true,
       status: 200,
-      json: async () => ({ fields: { labels: ["keep-me", "pgl-sprint-1"] } }),
+      json: async () => ({ fields: { labels: ["keep-me", "pgl-sprint-1"], status: { name: "Backlog" } } }),
       text: async () => "",
     };
   }
@@ -50,13 +63,16 @@ globalThis.fetch = async (url, init) => {
   return { ok: true, status: 204, json: async () => ({}), text: async () => "" };
 };
 
+const listed = await handleJiraRequest({ method: "GET", body: "" });
+assert(listed.status === 200, "status list");
+assert(listed.json.issues[0].status === "In Progress", "live status");
+
 const ok = await handleJiraRequest({
   method: "POST",
   body: JSON.stringify({ key: "PGL-109", start: "2026-09-16", due: "2026-09-16", owner: "lewis" }),
-  authorization: "Basic dGVzdDp0b2tlbg==",
 });
 assert(ok.status === 200, "success");
 assert(ok.json.sprint === "2", "sprint id");
-assert(fetches === 2, "read then write");
+assert(fetches === 3, "list + read + write");
 
 console.log("jira proxy tests ok");

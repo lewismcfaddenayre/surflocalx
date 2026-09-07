@@ -11,9 +11,8 @@ function jiraDevApi(): Plugin {
         req.on("data", (c) => chunks.push(c as Uint8Array));
         req.on("end", async () => {
           const result = await handleJiraRequest({
-            method: req.method || "POST",
+            method: req.method || "GET",
             body: Buffer.concat(chunks).toString("utf8"),
-            authorization: String(req.headers.authorization || ""),
           });
           res.statusCode = result.status;
           res.setHeader("content-type", "application/json");

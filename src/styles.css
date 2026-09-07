@@ -71,11 +71,14 @@ h1 {
 
 .links {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
+  justify-content: flex-end;
 }
 
 .links a,
 .links button,
+.links span,
 .jira {
   color: var(--ink);
   border: 1px solid var(--line);
@@ -88,7 +91,16 @@ h1 {
   cursor: pointer;
 }
 
-.links button.ok {
+.links span {
+  cursor: default;
+}
+
+.links button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.links .ok.on {
   border-color: var(--lewis);
   color: var(--lewis);
 }
@@ -268,7 +280,7 @@ h1 {
 }
 
 .cell {
-  min-height: 92px;
+  min-height: 128px;
   padding: 6px 4px;
   display: flex;
   flex-direction: column;
@@ -307,9 +319,47 @@ h1 {
   text-align: left;
   cursor: grab;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.chip-key {
   white-space: nowrap;
+  overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.chip-title {
+  font-size: 8px;
+  font-weight: 500;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.chip-st {
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  opacity: 0.82;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.1;
+}
+
+.st-backlog { opacity: 0.75; }
+.st-to-do { color: inherit; }
+.st-in-progress,
+.st-in-development { text-decoration: underline; text-underline-offset: 1px; }
+.st-done,
+.st-closed { opacity: 1; }
 
 .chip:active {
   cursor: grabbing;

@@ -1,36 +1,41 @@
 # PGL go-live Gantt
 
-Interactive swimlane Gantt for the Production-Go-Live board. Vite app on Vercel: https://surflocaltest.vercel.app
+Interactive swimlane Gantt for the Production-Go-Live board.
+
+Live: **https://surflocalx.vercel.app** (password protected)
 
 Clock: **Mon 7 Sep – Sun 27 Sep 2026**.
 
 - Live Jira: https://surflokal.atlassian.net/jira/software/c/projects/PGL
 - Confluence plan: https://surflokal.atlassian.net/wiki/spaces/~7120202f293e75b7044d2ea459a0ee035ecc92/pages/281608197/PGL+3-week+go-live+plan+sprints+Gantt+dependencies
 
-## What writes Jira
+## Site login
 
-Connect first (**Connect Jira** → Atlassian email + [API token](https://id.atlassian.com/manage-profile/security/api-tokens)). The token stays in this browser and is sent only to `/api/jira`.
+HTTP Basic Auth.
 
-| Action | Jira fields |
-| --- | --- |
-| Drag a chip onto a day | Start (`customfield_10015`), Due, sprint label `pgl-sprint-1/2/3` |
-| People view: drop onto Lewis or Alok | Same dates **and** assignee |
-| Drawer date picker | Start + Due + sprint label |
-| Assign Lewis / Assign Alok | Assignee (keeps the current day) |
+- Username: `pgl`
+- Password: `GoLive2026`
 
-Filters, search, sprint week buttons, and view tabs do **not** write Jira. Track swimlanes are display-only; dropping on another track still only changes the day.
+Override with `SITE_USER` / `SITE_PASSWORD` on Vercel if you want to change it.
 
-Only `PGL-*` issues can be updated. Failed writes revert the chip.
+## Jira writes
+
+The serverless `/api/jira` proxy uses `JIRA_EMAIL` + `JIRA_API_TOKEN` on the server. Drag a chip onto a day to write Start, Due, and `pgl-sprint-*`. People-view drops and Assign buttons update assignee. Status on each pill is loaded live from Jira.
 
 ## Local
 
 ```bash
+cp .env.example .env.local
+# set JIRA_API_TOKEN in .env.local
 npm install
 npm run dev
 ```
 
-`/api/jira` is served by Vite in development and by a Vercel serverless function in production.
-
 ## Vercel
 
 Root directory: repo root. Framework: Vite. Output: `dist`.
+
+Set production env vars:
+
+- `JIRA_EMAIL` — `lewis@surflocalexchange.com`
+- `JIRA_API_TOKEN` — Atlassian API token

@@ -1,8 +1,32 @@
+import { readFileSync, existsSync } from "node:fs";
+import { resolve } from "node:path";
+
 const JIRA = "https://surflokal.atlassian.net";
 const START_FIELD = "customfield_10015";
 const KEY_RE = /^PGL-\d+$/;
 const LEWIS = "712020:2f293e75-b704-4d2e-a459-a0ee035ecc92";
 const ALOK = "712020:87fcff65-f8a7-4c99-a7c8-7b06fc2ccdc7";
+
+function loadDotEnv() {
+  for (const name of [".env.local", ".env"]) {
+    const path = resolve(process.cwd(), name);
+    if (!existsSync(path)) continue;
+    for (const line of readFileSync(path, "utf8").split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eq = trimmed.indexOf("=");
+      if (eq < 1) continue;
+      const key = trimmed.slice(0, eq).trim();
+      let val = trimmed.slice(eq + 1).trim();
+      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+        val = val.slice(1, -1);
+      }
+      if (process.env[key] == null) process.env[key] = val;
+    }
+  }
+}
+
+loadDotEnv();
 
 export function sprintLabel(iso) {
   if (!iso) return null;
@@ -17,13 +41,59 @@ function sprintId(iso) {
   return label ? label.slice(-1) : "";
 }
 
-export async function handleJiraRequest({ method, body, authorization }) {
-  if (method === "OPTIONS") return { status: 204, json: {} };
-  if (method !== "POST") return { status: 405, json: { error: "POST only" } };
+function jiraHeaders() {
+  const email = process.env.JIRA_EMAIL || "lewis@surflocalexchange.com";
+  const token = process.env.JIRA_API_TOKEN || "";
+  if (!token) return null;
+  return {
+    Authorization: `Basic ${Buffer.from(`${email}:${token}`).toString("base64")}`,
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
+}
 
-  if (!authorization?.startsWith("Basic ")) {
-    return { status: 401, json: { error: "Connect Jira: missing credentials" } };
+async function listStatuses(headers) {
+  const issues = [];
+  let nextPageToken;
+  do {
+    const body = { jql: "project = PGL ORDER BY key", fields: ["status"], maxResults: 100 };
+    if (nextPageToken) body.nextPageToken = nextPageToken;
+    const res = await fetch(`${JIRA}/rest/api/3/search/jql`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      return { errorStatus: res.status, detail: text.slice(0, 400) };
+    }
+    const data = await res.json();
+    for (const issue of data.issues || []) {
+      issues.push({ key: issue.key, status: issue.fields?.status?.name || "Unknown" });
+    }
+    nextPageToken = data.isLast ? null : data.nextPageToken;
+  } while (nextPageToken);
+  return { issues };
+}
+
+export async function handleJiraRequest({ method, body }) {
+  if (method === "OPTIONS") return { status: 204, json: {} };
+
+  const headers = jiraHeaders();
+  if (!headers) return { status: 503, json: { error: "Jira token is not configured on the server" } };
+
+  if (method === "GET") {
+    const listed = await listStatuses(headers);
+    if (listed.errorStatus) {
+      return {
+        status: listed.errorStatus,
+        json: { error: `Jira read failed (${listed.errorStatus})`, detail: listed.detail },
+      };
+    }
+    return { status: 200, json: { issues: listed.issues } };
   }
+
+  if (method !== "POST") return { status: 405, json: { error: "GET or POST only" } };
 
   let payload = body;
   if (typeof payload === "string") {
@@ -46,13 +116,7 @@ export async function handleJiraRequest({ method, body, authorization }) {
     return { status: 400, json: { error: "Nothing to update" } };
   }
 
-  const headers = {
-    Authorization: authorization,
-    Accept: "application/json",
-    "Content-Type": "application/json",
-  };
-
-  const got = await fetch(`${JIRA}/rest/api/3/issue/${key}?fields=labels,assignee,${START_FIELD},duedate`, {
+  const got = await fetch(`${JIRA}/rest/api/3/issue/${key}?fields=labels,assignee,${START_FIELD},duedate,status`, {
     headers,
   });
   if (!got.ok) {
@@ -90,17 +154,17 @@ export async function handleJiraRequest({ method, body, authorization }) {
       sprint: sprintId(start || due),
       owner,
       assignee: owner === "lewis" ? "Lewis McFadden" : owner === "alok" ? "Alok Ranjan" : undefined,
+      status: issue.fields?.status?.name,
     },
   };
 }
 
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "authorization, content-type");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
 
   let body = req.body;
-  if (body == null) {
+  if (body == null && req.method !== "GET" && req.method !== "OPTIONS") {
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
     body = Buffer.concat(chunks).toString("utf8");
@@ -109,7 +173,6 @@ export default async function handler(req, res) {
   const result = await handleJiraRequest({
     method: req.method || "POST",
     body,
-    authorization: req.headers.authorization || "",
   });
   res.status(result.status).json(result.json);
 }
