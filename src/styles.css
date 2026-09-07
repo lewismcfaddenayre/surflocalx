@@ -9,9 +9,9 @@
   --alok: #e4b07a;
   --alok-ink: #2a1908;
   --gold: #f3d36b;
-  --s1: rgba(62, 207, 180, 0.16);
-  --s2: rgba(110, 168, 214, 0.18);
-  --s3: rgba(228, 176, 122, 0.18);
+  --s1: rgba(62, 207, 180, 0.28);
+  --s2: rgba(110, 168, 214, 0.3);
+  --s3: rgba(228, 176, 122, 0.3);
   --s1-line: #3ecfb4;
   --s2-line: #6ea8d6;
   --s3-line: #e4b07a;
@@ -270,7 +270,7 @@ h1 {
   gap: 8px;
   padding: 7px 12px;
   border-bottom: 1px solid var(--line);
-  border-right: 5px solid #07131a;
+  border-right: 8px solid #041016;
   font-size: 0.78rem;
   min-height: 34px;
 }
@@ -293,17 +293,17 @@ h1 {
 }
 
 .sprint-band.sprint-1 {
-  background: rgba(62, 207, 180, 0.32);
+  background: rgba(62, 207, 180, 0.45);
   color: var(--lewis);
 }
 
 .sprint-band.sprint-2 {
-  background: rgba(110, 168, 214, 0.34);
-  color: #9cc7ea;
+  background: rgba(110, 168, 214, 0.48);
+  color: #c5e0f5;
 }
 
 .sprint-band.sprint-3 {
-  background: rgba(228, 176, 122, 0.34);
+  background: rgba(228, 176, 122, 0.48);
   color: var(--alok);
 }
 
@@ -417,22 +417,42 @@ button.head:focus-visible {
   background: var(--s3);
 }
 
+.head.sprint-end,
+.cell.sprint-end {
+  border-right: 8px solid #041016;
+}
+
+.head.sprint-1 {
+  box-shadow: inset 0 3px 0 var(--s1-line);
+}
+.head.sprint-2 {
+  box-shadow: inset 0 3px 0 var(--s2-line);
+}
+.head.sprint-3 {
+  box-shadow: inset 0 3px 0 var(--s3-line);
+}
+
 .head.sprint-start.sprint-1,
 .cell.sprint-start.sprint-1 {
-  box-shadow: inset 4px 0 0 var(--s1-line);
+  box-shadow: inset 6px 0 0 var(--s1-line);
 }
 .head.sprint-start.sprint-2,
 .cell.sprint-start.sprint-2 {
-  box-shadow: inset 4px 0 0 var(--s2-line);
+  box-shadow: inset 6px 0 0 var(--s2-line);
 }
 .head.sprint-start.sprint-3,
 .cell.sprint-start.sprint-3 {
-  box-shadow: inset 4px 0 0 var(--s3-line);
+  box-shadow: inset 6px 0 0 var(--s3-line);
 }
 
-.head.sprint-end,
-.cell.sprint-end {
-  border-right: 5px solid #07131a;
+.head.sprint-1.sprint-start {
+  box-shadow: inset 6px 0 0 var(--s1-line), inset 0 3px 0 var(--s1-line);
+}
+.head.sprint-2.sprint-start {
+  box-shadow: inset 6px 0 0 var(--s2-line), inset 0 3px 0 var(--s2-line);
+}
+.head.sprint-3.sprint-start {
+  box-shadow: inset 6px 0 0 var(--s3-line), inset 0 3px 0 var(--s3-line);
 }
 
 .head.today-true {
@@ -441,13 +461,23 @@ button.head:focus-visible {
 }
 
 .head.today-true.sprint-start.sprint-1 {
-  box-shadow: inset 4px 0 0 var(--s1-line), inset 0 -2px 0 var(--gold);
+  box-shadow: inset 6px 0 0 var(--s1-line), inset 0 3px 0 var(--s1-line), inset 0 -2px 0 var(--gold);
 }
 .head.today-true.sprint-start.sprint-2 {
-  box-shadow: inset 4px 0 0 var(--s2-line), inset 0 -2px 0 var(--gold);
+  box-shadow: inset 6px 0 0 var(--s2-line), inset 0 3px 0 var(--s2-line), inset 0 -2px 0 var(--gold);
 }
 .head.today-true.sprint-start.sprint-3 {
-  box-shadow: inset 4px 0 0 var(--s3-line), inset 0 -2px 0 var(--gold);
+  box-shadow: inset 6px 0 0 var(--s3-line), inset 0 3px 0 var(--s3-line), inset 0 -2px 0 var(--gold);
+}
+
+.head.today-true.sprint-1:not(.sprint-start) {
+  box-shadow: inset 0 3px 0 var(--s1-line), inset 0 -2px 0 var(--gold);
+}
+.head.today-true.sprint-2:not(.sprint-start) {
+  box-shadow: inset 0 3px 0 var(--s2-line), inset 0 -2px 0 var(--gold);
+}
+.head.today-true.sprint-3:not(.sprint-start) {
+  box-shadow: inset 0 3px 0 var(--s3-line), inset 0 -2px 0 var(--gold);
 }
 
 .head.today-true strong {
