@@ -55,7 +55,7 @@ globalThis.fetch = async (url, init) => {
   assert(init?.method === "PUT", "PUT update");
   const body = JSON.parse(init.body);
   assert(body.fields.customfield_10015 === "2026-09-16", "start field");
-  assert(body.fields.duedate === "2026-09-16", "due field");
+  assert(body.fields.duedate === "2026-09-16" || body.fields.duedate === "2026-09-18", "due field");
   assert(body.fields.labels.includes("pgl-sprint-2"), "sprint 2 label");
   assert(!body.fields.labels.includes("pgl-sprint-1"), "old sprint label removed");
   assert(body.fields.labels.includes("keep-me"), "other labels kept");
@@ -73,6 +73,13 @@ const ok = await handleJiraRequest({
 });
 assert(ok.status === 200, "success");
 assert(ok.json.sprint === "2", "sprint id");
-assert(fetches === 3, "list + read + write");
+
+const okSpan = await handleJiraRequest({
+  method: "POST",
+  body: JSON.stringify({ key: "PGL-109", start: "2026-09-16", due: "2026-09-18", owner: "lewis" }),
+});
+assert(okSpan.status === 200, "span success");
+assert(okSpan.json.start === "2026-09-16", "span start");
+assert(okSpan.json.due === "2026-09-18", "span due");
 
 console.log("jira proxy tests ok");

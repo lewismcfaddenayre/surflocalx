@@ -268,6 +268,35 @@ h1 {
   display: grid;
   align-content: start;
   gap: 4px;
+  grid-column: 1;
+}
+
+.lane-body {
+  display: grid;
+  position: relative;
+  min-height: 128px;
+  border-bottom: 1px solid var(--line);
+}
+
+.chip-wrap {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  min-width: 0;
+  z-index: 2;
+  padding: 4px 2px;
+}
+
+.chip-resize {
+  width: 9px;
+  flex: 0 0 9px;
+  cursor: ew-resize;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 18%);
+}
+
+.chip-resize:hover {
+  background: rgb(0 0 0 / 32%);
 }
 
 .lane strong {
@@ -282,10 +311,7 @@ h1 {
 .cell {
   min-height: 128px;
   padding: 6px 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  align-items: stretch;
+  z-index: 1;
 }
 
 .weekend-true {
@@ -320,6 +346,7 @@ h1 {
   cursor: grab;
   overflow: hidden;
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
@@ -395,10 +422,11 @@ h1 {
   outline: 2px solid white;
 }
 
-.more {
+.more.span {
+  justify-self: start;
+  z-index: 2;
   color: var(--muted);
   font-size: 11px;
-  padding: 2px;
 }
 
 .drawer {
