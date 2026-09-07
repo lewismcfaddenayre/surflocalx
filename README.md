@@ -20,7 +20,7 @@ Override with `SITE_USER` / `SITE_PASSWORD` on Vercel if you want to change it.
 
 ## Jira writes
 
-The serverless `/api/jira` proxy uses `JIRA_EMAIL` + `JIRA_API_TOKEN` on the server. Drag a pill to move it (keeps duration). Drag the left or right edge across days to set Start and Due. **Mark as done** in the drawer transitions the Jira issue to Done. People-view drops and Assign buttons update assignee. Status on each pill is loaded live from Jira.
+The serverless `/api/jira` proxy uses `JIRA_EMAIL` + `JIRA_API_TOKEN` on the server. Drag a pill to move it (keeps duration). Drag the left or right edge across days to set Start and Due. Click a date header for that day’s tickets; **In progress** and **Done** (also in the drawer) transition Jira. People-view drops and Assign buttons update assignee. Status on each pill is loaded live from Jira.
 
 ## Local
 

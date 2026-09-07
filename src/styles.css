@@ -250,6 +250,23 @@ h1 {
   background: #0b1d25;
 }
 
+button.head {
+  appearance: none;
+  display: block;
+  width: 100%;
+  margin: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+button.head:hover,
+button.head:focus-visible {
+  color: var(--ink);
+  outline: 1px solid var(--gold);
+  outline-offset: -1px;
+  z-index: 4;
+}
+
 .head strong {
   display: block;
   color: var(--ink);
@@ -261,6 +278,10 @@ h1 {
   font-style: normal;
   color: var(--gold);
   font-size: 0.62rem;
+}
+
+.head em.count {
+  color: var(--muted);
 }
 
 .lane {
@@ -533,6 +554,10 @@ dt {
   cursor: wait;
 }
 
+.assign button.progress {
+  border-color: var(--gold);
+}
+
 .assign button.done {
   border-color: var(--lewis);
   background: var(--lewis);
@@ -540,6 +565,7 @@ dt {
   font-weight: 600;
 }
 
+.assign button.progress:disabled,
 .assign button.done:disabled {
   opacity: 0.7;
   cursor: default;
@@ -593,6 +619,108 @@ dt {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.day-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgb(4 12 16 / 62%);
+  z-index: 20;
+  display: grid;
+  place-items: start center;
+  padding: 48px 16px 24px;
+  overflow: auto;
+}
+
+.day-modal {
+  width: min(760px, 100%);
+  background: #102833;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 18px 18px 14px;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 45%);
+}
+
+.day-modal h2 {
+  margin: 0 48px 4px 0;
+}
+
+.day-modal .sub {
+  margin: 0 0 8px;
+}
+
+.day-empty {
+  color: var(--muted);
+  margin: 16px 0 8px;
+}
+
+.day-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  max-height: min(70vh, 640px);
+  overflow: auto;
+}
+
+.day-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 12px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #0b1d25;
+}
+
+.day-row.done {
+  opacity: 0.72;
+}
+
+.day-row.done .day-title {
+  text-decoration: line-through;
+}
+
+.day-key {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.day-key a {
+  color: inherit;
+}
+
+.day-title {
+  margin: 4px 0 6px;
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+.day-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.day-row .assign {
+  margin: 0;
+  justify-content: flex-end;
+}
+
+@media (max-width: 700px) {
+  .day-row {
+    grid-template-columns: 1fr;
+  }
+  .day-row .assign {
+    justify-content: flex-start;
+  }
 }
 
 .toast {

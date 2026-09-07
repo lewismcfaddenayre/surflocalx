@@ -3,7 +3,7 @@ export async function updateJiraIssue(payload: {
   start?: string;
   due?: string;
   owner?: "lewis" | "alok";
-  action?: "done";
+  action?: "done" | "progress";
 }) {
   const res = await fetch("/api/jira", {
     method: "POST",

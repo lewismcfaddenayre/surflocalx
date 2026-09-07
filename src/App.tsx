@@ -91,6 +91,18 @@ function isDone(status: string) {
   return /^done$/i.test(status);
 }
 
+function isInProgress(status: string) {
+  return /^in progress$/i.test(status);
+}
+
+function prettyDay(iso: string) {
+  return new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "short",
+  });
+}
+
 function issueLane(issue: Issue, view: View) {
   if (view === "people") return issue.owner;
   if (view === "critical") return "critical";
@@ -103,6 +115,13 @@ function issueRange(issue: Issue): [string, string] | null {
   const due = issue.due || issue.start;
   if (!start || !due) return null;
   return orderedRange(start, due);
+}
+
+function onCalendarDay(issue: Issue, day: string) {
+  if (issue.sprintEpic || issue.type === "epic") return false;
+  const range = issueRange(issue);
+  if (!range) return false;
+  return range[0] <= day && day <= range[1];
 }
 
 function matches(issue: Issue, q: string, owner: "all" | Owner, sprint: string) {
@@ -182,6 +201,7 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [dropRange, setDropRange] = useState<DropRange | null>(null);
+  const [dayOpen, setDayOpen] = useState<string | null>(null);
   const [statusSync, setStatusSync] = useState<"idle" | "loading" | "ok" | "error">("idle");
   const dragged = useRef(false);
   const dragMeta = useRef<DragMeta | null>(null);
@@ -236,6 +256,34 @@ export default function App() {
     }),
     [visible],
   );
+
+  const openByDay = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const issue of items) {
+      const range = issueRange(issue);
+      if (!range || issue.sprintEpic || issue.type === "epic" || isDone(issue.status)) continue;
+      for (const d of days) {
+        if (range[0] <= d && d <= range[1]) map.set(d, (map.get(d) ?? 0) + 1);
+      }
+    }
+    return map;
+  }, [items, days]);
+
+  const dayIssues = useMemo(() => {
+    if (!dayOpen) return [];
+    return items
+      .filter((issue) => onCalendarDay(issue, dayOpen))
+      .sort(
+        (a, b) =>
+          Number(isDone(a.status)) - Number(isDone(b.status)) ||
+          Number(b.critical) - Number(a.critical) ||
+          a.assignee.localeCompare(b.assignee) ||
+          a.key.localeCompare(b.key),
+      );
+  }, [items, dayOpen]);
+
+  const dayOpenIssues = dayIssues.filter((issue) => !isDone(issue.status));
+  const dayDoneIssues = dayIssues.filter((issue) => isDone(issue.status));
 
   function flash(msg: string) {
     setToast(msg);
@@ -310,23 +358,35 @@ export default function App() {
     }
   }
 
-  async function commitDone(key: string) {
+  async function commitStatus(key: string, action: "progress" | "done") {
     const current = itemsRef.current.find((i) => i.key === key);
-    if (!current || current.sprintEpic || isDone(current.status)) return;
+    if (!current || current.sprintEpic) return;
+    if (action === "done" && isDone(current.status)) return;
+    if (action === "progress" && isInProgress(current.status)) return;
     const prev = current.status;
-    applyLocal(key, { status: "Done" });
+    const optimistic = action === "done" ? "Done" : "In Progress";
+    applyLocal(key, { status: optimistic });
     setBusy(key);
     try {
-      const json = await updateJiraIssue({ key, action: "done" });
-      applyLocal(key, { status: json.status || "Done" });
-      flash(`${key} marked Done · Jira updated`);
+      const json = await updateJiraIssue({ key, action });
+      applyLocal(key, { status: json.status || optimistic });
+      flash(`${key} marked ${json.status || optimistic} · Jira updated`);
     } catch (err) {
       applyLocal(key, { status: prev });
-      flash(err instanceof Error ? err.message : "Jira Done update failed");
+      flash(err instanceof Error ? err.message : "Jira status update failed");
     } finally {
       setBusy(null);
     }
   }
+
+  useEffect(() => {
+    if (!dayOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setDayOpen(null);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [dayOpen]);
 
   function onDragOverCell(day: string, laneId: string) {
     return (e: DragEvent) => {
@@ -449,22 +509,33 @@ export default function App() {
           <span className="chip-key">Critical</span>
           <span className="chip-st">gold ring</span>
         </span>
-        <span>Drag the pill to move. Drag the left or right edge across days to span Start → Due.</span>
+        <span>Drag the pill to move. Drag edges to span days. Click a date for that day’s work.</span>
       </div>
 
       <div className="scroller">
         <div className="chart" style={{ gridTemplateColumns: `168px repeat(${days.length}, minmax(96px, 1fr))` }}>
           <div className="corner sticky">Track</div>
-          {days.map((d) => (
-            <div
-              key={d}
-              className={`head sticky weekend-${isWeekend(d)} today-${d === today} sprint-${sprintFor(d)}`}
-            >
-              <span>{weekday(d)}</span>
-              <strong>{dayNum(d)}</strong>
-              {d === today && <em>today</em>}
-            </div>
-          ))}
+          {days.map((d) => {
+            const open = openByDay.get(d) ?? 0;
+            return (
+              <button
+                key={d}
+                type="button"
+                className={`head sticky weekend-${isWeekend(d)} today-${d === today} sprint-${sprintFor(d)}`}
+                onClick={() => {
+                  setSelected(null);
+                  setDayOpen(d);
+                }}
+                aria-haspopup="dialog"
+                aria-label={`${prettyDay(d)}${d === today ? ", today" : ""}, ${open} to do`}
+              >
+                <span>{weekday(d)}</span>
+                <strong>{dayNum(d)}</strong>
+                {d === today && <em>today</em>}
+                {open > 0 && <em className="count">{open}</em>}
+              </button>
+            );
+          })}
 
           {lanes.map((lane) => (
             <Lane
@@ -586,9 +657,17 @@ export default function App() {
             </button>
             <button
               type="button"
+              className="progress"
+              disabled={busy === selected.key || isInProgress(selected.status)}
+              onClick={() => void commitStatus(selected.key, "progress")}
+            >
+              {isInProgress(selected.status) ? "In progress" : "Mark in progress"}
+            </button>
+            <button
+              type="button"
               className="done"
               disabled={busy === selected.key || isDone(selected.status)}
-              onClick={() => void commitDone(selected.key)}
+              onClick={() => void commitStatus(selected.key, "done")}
             >
               {isDone(selected.status) ? "Done" : "Mark as done"}
             </button>
@@ -599,6 +678,71 @@ export default function App() {
             Open in Jira
           </a>
         </aside>
+      )}
+
+      {dayOpen && (
+        <div
+          className="day-scrim"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setDayOpen(null);
+          }}
+        >
+          <div className="day-modal" role="dialog" aria-modal="true" aria-labelledby="day-title">
+            <button className="close" type="button" onClick={() => setDayOpen(null)} autoFocus>
+              Close
+            </button>
+            <p className="kicker">{dayOpen === today ? "Today" : "Day"}</p>
+            <h2 id="day-title">{prettyDay(dayOpen)}</h2>
+            <p className="sub">
+              {dayOpenIssues.length} to do
+              {dayDoneIssues.length > 0 ? ` · ${dayDoneIssues.length} done` : ""} · Mark In Progress or Done in Jira
+            </p>
+            {dayIssues.length === 0 ? (
+              <p className="day-empty">Nothing scheduled this day.</p>
+            ) : (
+              <ul className="day-list">
+                {dayIssues.map((issue) => (
+                  <li key={issue.key} className={`day-row ${issue.owner} ${isDone(issue.status) ? "done" : ""}`}>
+                    <div>
+                      <p className="day-key">
+                        <a href={issue.url} target="_blank" rel="noreferrer">
+                          {issue.key}
+                        </a>
+                        {issue.critical ? " · critical" : ""}
+                      </p>
+                      <p className="day-title">{issue.summary}</p>
+                      <p className="day-meta">
+                        <span>{issue.assignee}</span>
+                        <span className={`st-${statusClass(issue.status)}`}>{issue.status}</span>
+                        <span>
+                          {issue.start || issue.due} → {issue.due || issue.start}
+                        </span>
+                      </p>
+                    </div>
+                    <div className="assign">
+                      <button
+                        type="button"
+                        className="progress"
+                        disabled={busy === issue.key || isInProgress(issue.status)}
+                        onClick={() => void commitStatus(issue.key, "progress")}
+                      >
+                        In progress
+                      </button>
+                      <button
+                        type="button"
+                        className="done"
+                        disabled={busy === issue.key || isDone(issue.status)}
+                        onClick={() => void commitStatus(issue.key, "done")}
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
       )}
 
       {toast && <div className="toast">{toast}</div>}

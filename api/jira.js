@@ -76,11 +76,27 @@ async function listStatuses(headers) {
   return { issues };
 }
 
-function isDoneStatus(name) {
-  return /^done$/i.test(String(name || ""));
+function isDoneStatus(name, category) {
+  return /^done$/i.test(String(name || "")) || category === "done";
 }
 
-async function transitionDone(headers, key) {
+function isProgressStatus(name) {
+  return /^in progress$/i.test(String(name || ""));
+}
+
+function pickTransition(transitions, action) {
+  const list = (transitions || []).filter((t) => t.isAvailable !== false);
+  if (action === "done") {
+    return list.find(
+      (t) => /^done$/i.test(t.to?.name || "") || t.to?.statusCategory?.key === "done" || /^done$/i.test(t.name || ""),
+    );
+  }
+  return list.find((t) => /^in progress$/i.test(t.to?.name || "") || /^in progress$/i.test(t.name || ""));
+}
+
+async function transitionIssue(headers, key, action) {
+  const wantDone = action === "done";
+  const label = wantDone ? "Done" : "In Progress";
   const got = await fetch(`${JIRA}/rest/api/3/issue/${key}?fields=status`, { headers });
   if (!got.ok) {
     const text = await got.text();
@@ -88,8 +104,9 @@ async function transitionDone(headers, key) {
   }
   const issue = await got.json();
   const current = issue.fields?.status?.name || "";
-  if (isDoneStatus(current) || issue.fields?.status?.statusCategory?.key === "done") {
-    return { status: 200, json: { key, status: current || "Done" } };
+  const category = issue.fields?.status?.statusCategory?.key;
+  if (wantDone ? isDoneStatus(current, category) : isProgressStatus(current)) {
+    return { status: 200, json: { key, status: current || label } };
   }
 
   const listed = await fetch(`${JIRA}/rest/api/3/issue/${key}/transitions`, { headers });
@@ -98,26 +115,22 @@ async function transitionDone(headers, key) {
     return { status: listed.status, json: { error: `Jira transitions failed (${listed.status})`, detail: text.slice(0, 400) } };
   }
   const data = await listed.json();
-  const done = (data.transitions || []).find(
-    (t) =>
-      t.isAvailable !== false &&
-      (/^done$/i.test(t.to?.name || "") || t.to?.statusCategory?.key === "done" || /^done$/i.test(t.name || "")),
-  );
-  if (!done) {
-    return { status: 409, json: { error: "No Done transition is available for this issue" } };
+  const picked = pickTransition(data.transitions, action);
+  if (!picked) {
+    return { status: 409, json: { error: `No ${label} transition is available for this issue` } };
   }
 
   const posted = await fetch(`${JIRA}/rest/api/3/issue/${key}/transitions`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ transition: { id: done.id } }),
+    body: JSON.stringify({ transition: { id: picked.id } }),
   });
   if (!posted.ok) {
     const text = await posted.text();
-    return { status: posted.status, json: { error: `Jira Done update failed (${posted.status})`, detail: text.slice(0, 400) } };
+    return { status: posted.status, json: { error: `Jira ${label} update failed (${posted.status})`, detail: text.slice(0, 400) } };
   }
 
-  return { status: 200, json: { key, status: done.to?.name || "Done" } };
+  return { status: 200, json: { key, status: picked.to?.name || label } };
 }
 
 export async function handleJiraRequest({ method, body }) {
@@ -152,8 +165,11 @@ export async function handleJiraRequest({ method, body }) {
   const key = String(payload.key || "").toUpperCase();
   if (!KEY_RE.test(key)) return { status: 400, json: { error: "Only PGL issues can be moved" } };
 
-  if (payload.action === "done") {
-    return transitionDone(headers, key);
+  if (payload.action === "done" || payload.action === "progress") {
+    return transitionIssue(headers, key, payload.action);
+  }
+  if (payload.action) {
+    return { status: 400, json: { error: "Unknown action" } };
   }
 
   const start = payload.start ? String(payload.start) : null;
