@@ -81,7 +81,7 @@ export default function App() {
   const lanes = useMemo(() => {
     if (view === "people") {
       return [
-        { id: "lewis", name: "Lewis", hint: "AI, email, AWS, SMS" },
+        { id: "lewis", name: "Lewis", hint: "AI, email, SMS" },
         { id: "alok", name: "Alok", hint: "Everything else" },
       ];
     }
