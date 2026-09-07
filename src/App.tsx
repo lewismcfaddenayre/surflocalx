@@ -57,6 +57,18 @@ function sprintFor(iso: string) {
   return plan.sprints.find((s) => iso >= s.start && iso <= s.end)?.id ?? "";
 }
 
+function isSprintStart(iso: string) {
+  return plan.sprints.some((s) => s.start === iso);
+}
+
+function isSprintEnd(iso: string) {
+  return plan.sprints.some((s) => s.end === iso);
+}
+
+function sprintShortName(name: string) {
+  return name.replace(/^Sprint \d+\s+[—–-]\s+/, "");
+}
+
 function addDays(iso: string, n: number) {
   return new Date(Date.parse(`${iso}T00:00:00`) + n * DAY_MS).toISOString().slice(0, 10);
 }
@@ -528,14 +540,36 @@ export default function App() {
 
       <div className="scroller">
         <div className="chart" style={{ gridTemplateColumns: `168px repeat(${days.length}, minmax(96px, 1fr))` }}>
-          <div className="corner sticky">Track</div>
+          <div className="corner sprint-corner sticky">Sprint</div>
+          {plan.sprints.map((s) => {
+            const from = dayIndex.get(s.start);
+            const to = dayIndex.get(s.end);
+            if (from == null || to == null) return null;
+            return (
+              <div
+                key={s.id}
+                className={`sprint-band sticky sprint-${s.id}`}
+                style={{ gridColumn: `${from + 2} / ${to + 3}`, gridRow: 1 }}
+              >
+                <strong>Sprint {s.id}</strong>
+                <span>{sprintShortName(s.name)}</span>
+                <em>
+                  {s.start.slice(8)}–{s.end.slice(8)} Sep
+                </em>
+              </div>
+            );
+          })}
+          <div className="corner sticky" style={{ gridRow: 2 }}>
+            Track
+          </div>
           {days.map((d) => {
             const open = openByDay.get(d) ?? 0;
             return (
               <button
                 key={d}
                 type="button"
-                className={`head sticky weekend-${isWeekend(d)} today-${d === today} sprint-${sprintFor(d)}`}
+                className={`head sticky weekend-${isWeekend(d)} today-${d === today} sprint-${sprintFor(d)} ${isSprintStart(d) ? "sprint-start" : ""} ${isSprintEnd(d) ? "sprint-end" : ""}`}
+                style={{ gridRow: 2 }}
                 onClick={() => {
                   setSelected(null);
                   setDayOpen(d);
@@ -843,7 +877,7 @@ function Lane({
           return (
             <div
               key={d}
-              className={`cell weekend-${isWeekend(d)} sprint-${sprintFor(d)} today-${d === today} ${inDrop ? "drop" : ""}`}
+              className={`cell weekend-${isWeekend(d)} sprint-${sprintFor(d)} today-${d === today} ${isSprintStart(d) ? "sprint-start" : ""} ${isSprintEnd(d) ? "sprint-end" : ""} ${inDrop ? "drop" : ""}`}
               style={{ gridColumn: i + 1, gridRow: "1 / -1" }}
               onDragOver={onDragOverCell(d, lane.id)}
               onDrop={onDropCell(d, lane.id)}
