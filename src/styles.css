@@ -504,6 +504,7 @@ dt {
 
 .assign {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin: 12px 0 4px;
 }
@@ -530,6 +531,27 @@ dt {
 .assign button:disabled {
   opacity: 0.45;
   cursor: wait;
+}
+
+.assign button.done {
+  border-color: var(--lewis);
+  background: var(--lewis);
+  color: var(--lewis-ink);
+  font-weight: 600;
+}
+
+.assign button.done:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.chip.done {
+  opacity: 0.72;
+}
+
+.chip.done .chip-title,
+.chip.done .chip-key {
+  text-decoration: line-through;
 }
 
 .connect {

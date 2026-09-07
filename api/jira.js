@@ -76,6 +76,50 @@ async function listStatuses(headers) {
   return { issues };
 }
 
+function isDoneStatus(name) {
+  return /^done$/i.test(String(name || ""));
+}
+
+async function transitionDone(headers, key) {
+  const got = await fetch(`${JIRA}/rest/api/3/issue/${key}?fields=status`, { headers });
+  if (!got.ok) {
+    const text = await got.text();
+    return { status: got.status, json: { error: `Jira read failed (${got.status})`, detail: text.slice(0, 400) } };
+  }
+  const issue = await got.json();
+  const current = issue.fields?.status?.name || "";
+  if (isDoneStatus(current) || issue.fields?.status?.statusCategory?.key === "done") {
+    return { status: 200, json: { key, status: current || "Done" } };
+  }
+
+  const listed = await fetch(`${JIRA}/rest/api/3/issue/${key}/transitions`, { headers });
+  if (!listed.ok) {
+    const text = await listed.text();
+    return { status: listed.status, json: { error: `Jira transitions failed (${listed.status})`, detail: text.slice(0, 400) } };
+  }
+  const data = await listed.json();
+  const done = (data.transitions || []).find(
+    (t) =>
+      t.isAvailable !== false &&
+      (/^done$/i.test(t.to?.name || "") || t.to?.statusCategory?.key === "done" || /^done$/i.test(t.name || "")),
+  );
+  if (!done) {
+    return { status: 409, json: { error: "No Done transition is available for this issue" } };
+  }
+
+  const posted = await fetch(`${JIRA}/rest/api/3/issue/${key}/transitions`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ transition: { id: done.id } }),
+  });
+  if (!posted.ok) {
+    const text = await posted.text();
+    return { status: posted.status, json: { error: `Jira Done update failed (${posted.status})`, detail: text.slice(0, 400) } };
+  }
+
+  return { status: 200, json: { key, status: done.to?.name || "Done" } };
+}
+
 export async function handleJiraRequest({ method, body }) {
   if (method === "OPTIONS") return { status: 204, json: {} };
 
@@ -107,6 +151,10 @@ export async function handleJiraRequest({ method, body }) {
 
   const key = String(payload.key || "").toUpperCase();
   if (!KEY_RE.test(key)) return { status: 400, json: { error: "Only PGL issues can be moved" } };
+
+  if (payload.action === "done") {
+    return transitionDone(headers, key);
+  }
 
   const start = payload.start ? String(payload.start) : null;
   const due = payload.due ? String(payload.due) : start;

@@ -44,6 +44,30 @@ globalThis.fetch = async (url, init) => {
       text: async () => "",
     };
   }
+  if (String(url).includes("/transitions")) {
+    if (init?.method === "POST") {
+      assert(JSON.parse(init.body).transition.id === "41", "done transition id");
+      return { ok: true, status: 204, json: async () => ({}), text: async () => "" };
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        transitions: [{ id: "41", name: "Done", to: { name: "Done", statusCategory: { key: "done" } }, isAvailable: true }],
+      }),
+      text: async () => "",
+    };
+  }
+  if (String(url).includes("fields=status") && !String(url).includes("labels")) {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        fields: { status: { name: "In Progress", statusCategory: { key: "indeterminate" } } },
+      }),
+      text: async () => "",
+    };
+  }
   if (String(url).includes("fields=")) {
     return {
       ok: true,
@@ -81,5 +105,52 @@ const okSpan = await handleJiraRequest({
 assert(okSpan.status === 200, "span success");
 assert(okSpan.json.start === "2026-09-16", "span start");
 assert(okSpan.json.due === "2026-09-18", "span due");
+
+const marked = await handleJiraRequest({
+  method: "POST",
+  body: JSON.stringify({ key: "PGL-109", action: "done" }),
+});
+assert(marked.status === 200, "done success");
+assert(marked.json.status === "Done", "done status");
+
+let alreadyFetches = 0;
+globalThis.fetch = async (url, init) => {
+  alreadyFetches += 1;
+  assert(!String(url).includes("/transitions") || init?.method !== "POST", "skip Done when already done");
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({ fields: { status: { name: "Done", statusCategory: { key: "done" } } } }),
+    text: async () => "",
+  };
+};
+const already = await handleJiraRequest({
+  method: "POST",
+  body: JSON.stringify({ key: "PGL-109", action: "done" }),
+});
+assert(already.status === 200 && already.json.status === "Done", "already done");
+assert(alreadyFetches === 1, "already done reads once");
+
+globalThis.fetch = async (url) => {
+  if (String(url).includes("/transitions")) {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ transitions: [{ id: "21", name: "In Progress", to: { name: "In Progress" } }] }),
+      text: async () => "",
+    };
+  }
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({ fields: { status: { name: "Backlog", statusCategory: { key: "new" } } } }),
+    text: async () => "",
+  };
+};
+const blocked = await handleJiraRequest({
+  method: "POST",
+  body: JSON.stringify({ key: "PGL-1", action: "done" }),
+});
+assert(blocked.status === 409, "no Done transition");
 
 console.log("jira proxy tests ok");
