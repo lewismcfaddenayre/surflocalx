@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --host --port 4173"
+    "preview": "vite preview --host --port 4173",
+    "test": "node scripts/jira-proxy.test.js"
   },
   "dependencies": {
     "react": "^19.1.1",
