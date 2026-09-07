@@ -56,7 +56,7 @@ async function listStatuses(headers) {
   const issues = [];
   let nextPageToken;
   do {
-    const body = { jql: "project = PGL ORDER BY key", fields: ["status"], maxResults: 100 };
+    const body = { jql: "project = PGL ORDER BY key", fields: ["status", START_FIELD, "duedate"], maxResults: 100 };
     if (nextPageToken) body.nextPageToken = nextPageToken;
     const res = await fetch(`${JIRA}/rest/api/3/search/jql`, {
       method: "POST",
@@ -69,7 +69,12 @@ async function listStatuses(headers) {
     }
     const data = await res.json();
     for (const issue of data.issues || []) {
-      issues.push({ key: issue.key, status: issue.fields?.status?.name || "Unknown" });
+      issues.push({
+        key: issue.key,
+        status: issue.fields?.status?.name || "Unknown",
+        start: issue.fields?.[START_FIELD] || null,
+        due: issue.fields?.duedate || null,
+      });
     }
     nextPageToken = data.isLast ? null : data.nextPageToken;
   } while (nextPageToken);

@@ -192,6 +192,7 @@ export default function App() {
   const [items, setItems] = useState<Issue[]>(() => structuredClone(plan.issues) as Issue[]);
   const itemsRef = useRef(items);
   itemsRef.current = items;
+  const dateEpoch = useRef(0);
   const [view, setView] = useState<View>("tracks");
   const [owner, setOwner] = useState<"all" | Owner>("all");
   const [sprint, setSprint] = useState("all");
@@ -291,17 +292,49 @@ export default function App() {
   }
 
   function applyLocal(key: string, patch: Partial<Issue>) {
+    if (patch.start !== undefined || patch.due !== undefined) dateEpoch.current += 1;
     setItems((prev) => prev.map((i) => (i.key === key ? { ...i, ...patch } : i)));
     setSelected((cur) => (cur?.key === key ? { ...cur, ...patch } : cur));
   }
 
   async function refreshStatuses() {
+    const epoch = dateEpoch.current;
     setStatusSync("loading");
     try {
       const live = await loadJiraStatuses();
-      const byKey = new Map(live.map((row) => [row.key, row.status]));
-      setItems((prev) => prev.map((issue) => (byKey.has(issue.key) ? { ...issue, status: byKey.get(issue.key) as string } : issue)));
-      setSelected((cur) => (cur && byKey.has(cur.key) ? { ...cur, status: byKey.get(cur.key) as string } : cur));
+      const byKey = new Map(live.map((row) => [row.key, row]));
+      const liveDates = epoch === dateEpoch.current;
+      setItems((prev) =>
+        prev.map((issue) => {
+          const row = byKey.get(issue.key);
+          if (!row) return issue;
+          const start = liveDates ? row.start || row.due || issue.start : issue.start;
+          const due = liveDates ? row.due || row.start || issue.due : issue.due;
+          const sprintDay = start || due;
+          return {
+            ...issue,
+            status: row.status || issue.status,
+            start,
+            due,
+            sprint: sprintDay ? sprintFor(sprintDay) || issue.sprint : issue.sprint,
+          };
+        }),
+      );
+      setSelected((cur) => {
+        if (!cur) return cur;
+        const row = byKey.get(cur.key);
+        if (!row) return cur;
+        const start = liveDates ? row.start || row.due || cur.start : cur.start;
+        const due = liveDates ? row.due || row.start || cur.due : cur.due;
+        const sprintDay = start || due;
+        return {
+          ...cur,
+          status: row.status || cur.status,
+          start,
+          due,
+          sprint: sprintDay ? sprintFor(sprintDay) || cur.sprint : cur.sprint,
+        };
+      });
       setStatusSync("ok");
     } catch (err) {
       setStatusSync("error");

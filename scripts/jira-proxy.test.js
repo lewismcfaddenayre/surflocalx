@@ -39,7 +39,16 @@ globalThis.fetch = async (url, init) => {
       status: 200,
       json: async () => ({
         isLast: true,
-        issues: [{ key: "PGL-109", fields: { status: { name: "In Progress" } } }],
+        issues: [
+          {
+            key: "PGL-109",
+            fields: {
+              status: { name: "In Progress" },
+              customfield_10015: "2026-09-10",
+              duedate: "2026-09-12",
+            },
+          },
+        ],
       }),
       text: async () => "",
     };
@@ -93,6 +102,8 @@ globalThis.fetch = async (url, init) => {
 const listed = await handleJiraRequest({ method: "GET", body: "" });
 assert(listed.status === 200, "status list");
 assert(listed.json.issues[0].status === "In Progress", "live status");
+assert(listed.json.issues[0].start === "2026-09-10", "live start");
+assert(listed.json.issues[0].due === "2026-09-12", "live due");
 
 const ok = await handleJiraRequest({
   method: "POST",

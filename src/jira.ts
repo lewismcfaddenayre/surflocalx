@@ -29,7 +29,10 @@ export async function updateJiraIssue(payload: {
 
 export async function loadJiraStatuses() {
   const res = await fetch("/api/jira");
-  const json = (await res.json()) as { error?: string; issues?: { key: string; status: string }[] };
+  const json = (await res.json()) as {
+    error?: string;
+    issues?: { key: string; status: string; start?: string | null; due?: string | null }[];
+  };
   if (!res.ok) {
     throw new Error(json.error || `Jira ${res.status}`);
   }
