@@ -421,31 +421,6 @@ export default function App() {
 
   return (
     <div className="page">
-      <header className="top">
-        <div>
-          <p className="kicker">Surf Local · Production go-live</p>
-          <h1>{plan.title}</h1>
-          <p className="sub">
-            Drag a pill to move it. Drag either edge across days to set Start and Due. In People view, drop onto
-            Lewis or Alok to reassign. Filters do not write Jira.
-          </p>
-        </div>
-        <div className="links">
-          <span className={`ok ${statusSync === "ok" ? "on" : ""}`}>
-            {statusSync === "loading" ? "Syncing Jira…" : statusSync === "ok" ? "Jira live" : statusSync === "error" ? "Jira sync failed" : "Jira"}
-          </span>
-          <button type="button" onClick={() => void refreshStatuses()} disabled={statusSync === "loading"}>
-            Refresh statuses
-          </button>
-          <a href={plan.jira} target="_blank" rel="noreferrer">
-            PGL board
-          </a>
-          <a href={plan.confluence} target="_blank" rel="noreferrer">
-            Confluence plan
-          </a>
-        </div>
-      </header>
-
       <section className="sprints">
         {plan.sprints.map((s) => (
           <button
@@ -492,6 +467,12 @@ export default function App() {
         <p className="meta">
           {visible.length} items · {counts.critical} on the critical path
         </p>
+        <span className={`ok ${statusSync === "ok" ? "on" : ""}`}>
+          {statusSync === "loading" ? "Syncing Jira…" : statusSync === "ok" ? "Jira live" : statusSync === "error" ? "Jira sync failed" : "Jira"}
+        </span>
+        <button type="button" className="refresh" onClick={() => void refreshStatuses()} disabled={statusSync === "loading"}>
+          Refresh
+        </button>
       </div>
 
       <div className="legend">
