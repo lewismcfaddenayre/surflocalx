@@ -75,6 +75,14 @@ function orderedRange(a: string, b: string): [string, string] {
   return a <= b ? [a, b] : [b, a];
 }
 
+function calendarToday() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function statusClass(status: string) {
   return status.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "unknown";
 }
@@ -155,6 +163,7 @@ function previewRange(meta: DragMeta, hover: string): [string, string] {
 }
 
 export default function App() {
+  const today = calendarToday();
   const days = useMemo(() => eachDay(plan.clockStart, plan.clockEnd), []);
   const dayIndex = useMemo(() => new Map(days.map((d, i) => [d, i])), [days]);
   const [items, setItems] = useState<Issue[]>(() => structuredClone(plan.issues) as Issue[]);
@@ -427,11 +436,11 @@ export default function App() {
           {days.map((d) => (
             <div
               key={d}
-              className={`head sticky weekend-${isWeekend(d)} today-${d === plan.today} sprint-${sprintFor(d)}`}
+              className={`head sticky weekend-${isWeekend(d)} today-${d === today} sprint-${sprintFor(d)}`}
             >
               <span>{weekday(d)}</span>
               <strong>{dayNum(d)}</strong>
-              {d === plan.today && <em>today</em>}
+              {d === today && <em>today</em>}
             </div>
           ))}
 
@@ -441,6 +450,7 @@ export default function App() {
               lane={lane}
               days={days}
               dayIndex={dayIndex}
+              today={today}
               issues={byLane.get(lane.id) ?? []}
               expand={expand[lane.id] ?? false}
               dropRange={dropRange}
@@ -570,6 +580,7 @@ function Lane({
   lane,
   days,
   dayIndex,
+  today,
   issues,
   expand,
   dropRange,
@@ -585,6 +596,7 @@ function Lane({
   lane: { id: string; name: string; hint: string };
   days: string[];
   dayIndex: Map<string, number>;
+  today: string;
   issues: Issue[];
   expand: boolean;
   dropRange: DropRange | null;
@@ -643,7 +655,7 @@ function Lane({
           return (
             <div
               key={d}
-              className={`cell weekend-${isWeekend(d)} sprint-${sprintFor(d)} ${inDrop ? "drop" : ""}`}
+              className={`cell weekend-${isWeekend(d)} sprint-${sprintFor(d)} today-${d === today} ${inDrop ? "drop" : ""}`}
               style={{ gridColumn: i + 1, gridRow: "1 / -1" }}
               onDragOver={onDragOverCell(d, lane.id)}
               onDrop={onDropCell(d, lane.id)}
