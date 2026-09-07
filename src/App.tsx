@@ -79,6 +79,10 @@ function statusClass(status: string) {
   return status.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "unknown";
 }
 
+function isDone(status: string) {
+  return /^done$/i.test(status);
+}
+
 function issueLane(issue: Issue, view: View) {
   if (view === "people") return issue.owner;
   if (view === "critical") return "critical";
@@ -294,6 +298,24 @@ export default function App() {
       setBusy(null);
       setDropRange(null);
       dragMeta.current = null;
+    }
+  }
+
+  async function commitDone(key: string) {
+    const current = itemsRef.current.find((i) => i.key === key);
+    if (!current || current.sprintEpic || isDone(current.status)) return;
+    const prev = current.status;
+    applyLocal(key, { status: "Done" });
+    setBusy(key);
+    try {
+      const json = await updateJiraIssue({ key, action: "done" });
+      applyLocal(key, { status: json.status || "Done" });
+      flash(`${key} marked Done · Jira updated`);
+    } catch (err) {
+      applyLocal(key, { status: prev });
+      flash(err instanceof Error ? err.message : "Jira Done update failed");
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -552,6 +574,14 @@ export default function App() {
             >
               Assign Alok
             </button>
+            <button
+              type="button"
+              className="done"
+              disabled={busy === selected.key || isDone(selected.status)}
+              onClick={() => void commitDone(selected.key)}
+            >
+              {isDone(selected.status) ? "Done" : "Mark as done"}
+            </button>
           </div>
           {selected.blockedBy.length > 0 && <p>Blocked by {selected.blockedBy.join(", ")}</p>}
           {selected.blocks.length > 0 && <p>Blocks {selected.blocks.join(", ")}</p>}
@@ -675,7 +705,7 @@ function Lane({
               />
               <button
                 draggable
-                className={`chip ${issue.owner} ${issue.critical ? "critical" : ""} ${selectedKey === issue.key ? "sel" : ""} ${busy === issue.key ? "busy" : ""}`}
+                className={`chip ${issue.owner} ${issue.critical ? "critical" : ""} ${selectedKey === issue.key ? "sel" : ""} ${busy === issue.key ? "busy" : ""} ${isDone(issue.status) ? "done" : ""}`}
                 title={`${issue.key} ${issue.summary} · ${issue.status} · ${range[0]} → ${range[1]}`}
                 onDragStart={(e) => beginDrag(e, issue, "move")}
                 onClick={() => onSelect(issue)}
