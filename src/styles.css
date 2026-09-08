@@ -587,7 +587,7 @@ button.head:focus-visible {
 
 .status-label.st-in-progress,
 .status-label.st-in-development {
-  background: var(--gold);
+  background: #f0b429;
   color: #2a1908;
 }
 
