@@ -153,4 +153,34 @@ assert(!status.json.reply.includes("```"), "reply hides ticket fence");
 if (savedKey) process.env.CURSOR_API_KEY = savedKey;
 else delete process.env.CURSOR_API_KEY;
 
+delete process.env.VERCEL;
+process.env.IDEA_MOCK = "1";
+delete process.env.CURSOR_API_KEY;
+const mocked = await handleIdeaRequest({
+  method: "POST",
+  body: JSON.stringify({ text: "Customer SMS opt-out audit before campaigns" }),
+});
+assert(mocked.status === 200 && mocked.json.agentId.startsWith("bc-"), "mock start");
+const mockedStatus = await handleIdeaRequest({
+  method: "POST",
+  body: JSON.stringify({
+    action: "status",
+    agentId: mocked.json.agentId,
+    runId: mocked.json.runId,
+  }),
+});
+assert(mockedStatus.json.done === true, "mock finishes");
+assert(mockedStatus.json.suggestion.summary.includes("SMS"), "mock suggestion");
+assert(!mockedStatus.json.reply.includes("```"), "mock reply is human");
+
+process.env.VERCEL = "1";
+const blocked = await handleIdeaRequest({
+  method: "POST",
+  body: JSON.stringify({ text: "Customer SMS opt-out audit before campaigns" }),
+});
+assert(blocked.status === 503, "mock disabled on Vercel");
+delete process.env.VERCEL;
+delete process.env.IDEA_MOCK;
+if (savedKey) process.env.CURSOR_API_KEY = savedKey;
+
 console.log("idea proxy tests ok");

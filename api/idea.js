@@ -30,6 +30,33 @@ function loadDotEnv() {
 
 loadDotEnv();
 
+function useIdeaMock() {
+  return process.env.IDEA_MOCK === "1" && process.env.VERCEL !== "1";
+}
+
+function mockIdea() {
+  const agentId = "bc-00000000-0000-0000-0000-000000000099";
+  const runId = "run-00000000-0000-0000-0000-000000000099";
+  const result = `Suggested outcome: a Task under Email to audit SMS opt-out before campaigns go out.
+
+Parent PGL-7, Lewis, 14–16 Sep, related to PGL-209. Nothing has been written to Jira.
+
+\`\`\`ticket
+{
+  "summary": "MSG Audit customer SMS opt-out before campaigns",
+  "description": "Done when suppression is checked before PGL-209 sends. Relates to the campaign SMS work.",
+  "owner": "lewis",
+  "start": "2026-09-14",
+  "due": "2026-09-16",
+  "parent": "PGL-7",
+  "priority": "High",
+  "labels": ["go-live","three-week-plan"],
+  "related": ["PGL-209"]
+}
+\`\`\``;
+  return { agentId, runId, result };
+}
+
 function cursorHeaders() {
   const key = process.env.CURSOR_API_KEY || "";
   if (!key) return null;
@@ -167,7 +194,9 @@ export async function handleIdeaRequest({ method, body }) {
   if (method === "OPTIONS") return { status: 204, json: {} };
   if (method !== "GET" && method !== "POST") return { status: 405, json: { error: "GET or POST only" } };
 
-  if (!cursorHeaders()) return { status: 503, json: { error: "Cursor API key is not configured on the server" } };
+  if (!cursorHeaders() && !useIdeaMock()) {
+    return { status: 503, json: { error: "Cursor API key is not configured on the server" } };
+  }
 
   let payload = body;
   if (typeof payload === "string") {
@@ -178,6 +207,26 @@ export async function handleIdeaRequest({ method, body }) {
     }
   }
   payload = payload || {};
+
+  if (useIdeaMock()) {
+    const mock = mockIdea();
+    if (method === "GET" || payload.action === "status") {
+      return {
+        status: 200,
+        json: {
+          agentId: mock.agentId,
+          runId: mock.runId,
+          status: "FINISHED",
+          done: true,
+          reply: stripTicket(mock.result),
+          suggestion: parseTicket(mock.result),
+        },
+      };
+    }
+    const mockText = String(payload.text || "").trim();
+    if (mockText.length < 3) return { status: 400, json: { error: "Say what you want to add to SLX" } };
+    return { status: 200, json: { agentId: mock.agentId, runId: mock.runId, status: "CREATING" } };
+  }
 
   if (method === "GET" || payload.action === "status") {
     const agentId = String(payload.agentId || "").trim();
