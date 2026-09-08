@@ -348,4 +348,85 @@ const customerEmail = mapJiraIssue({
 });
 assert(customerEmail.track === "email", "customer email stays on Email");
 
+let createdBody;
+let linked;
+globalThis.fetch = async (url, init) => {
+  if (String(url).endsWith("/rest/api/3/issue") && init?.method === "POST") {
+    createdBody = JSON.parse(init.body);
+    return {
+      ok: true,
+      status: 201,
+      json: async () => ({ key: "PGL-300" }),
+      text: async () => "",
+    };
+  }
+  if (String(url).includes("/issueLink")) {
+    linked = JSON.parse(init.body);
+    return { ok: true, status: 201, json: async () => ({}), text: async () => "" };
+  }
+  if (String(url).includes("/issue/PGL-300")) {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        key: "PGL-300",
+        fields: {
+          summary: "Provision a second sending domain for Acme",
+          issuetype: { name: "Task" },
+          parent: { key: "PGL-7" },
+          status: { name: "To Do" },
+          customfield_10015: "2026-09-08",
+          duedate: "2026-09-10",
+          assignee: {
+            accountId: "712020:2f293e75-b704-4d2e-a459-a0ee035ecc92",
+            displayName: "Lewis McFadden",
+          },
+          labels: ["go-live", "three-week-plan", "pgl-sprint-1"],
+          priority: { name: "High" },
+          issuelinks: [],
+        },
+      }),
+      text: async () => "",
+    };
+  }
+  throw new Error(`unexpected fetch ${url}`);
+};
+
+const tooShort = await handleJiraRequest({
+  method: "POST",
+  body: JSON.stringify({ action: "create", summary: "short" }),
+});
+assert(tooShort.status === 400, "create summary too short");
+
+const created = await handleJiraRequest({
+  method: "POST",
+  body: JSON.stringify({
+    action: "create",
+    summary: "Provision a second sending domain for Acme",
+    description: "Done when SPF/DKIM/DMARC pass for the customer domain.",
+    owner: "lewis",
+    start: "2026-09-08",
+    due: "2026-09-10",
+    parent: "PGL-7",
+    priority: "High",
+    labels: ["cynthia-email"],
+    related: ["PGL-205"],
+  }),
+});
+assert(created.status === 200, "create success");
+assert(created.json.key === "PGL-300", "created key");
+assert(created.json.issue.summary.includes("sending domain"), "created issue mapped");
+assert(created.json.issue.parent === "PGL-7", "created parent");
+assert(created.json.issue.owner === "lewis", "created owner");
+assert(createdBody.fields.issuetype.name === "Task", "creates a Task");
+assert(createdBody.fields.project.key === "PGL", "PGL project");
+assert(createdBody.fields.parent.key === "PGL-7", "parent epic");
+assert(createdBody.fields.assignee.accountId.includes("2f293e75"), "Lewis assignee");
+assert(createdBody.fields.labels.includes("go-live"), "go-live label");
+assert(createdBody.fields.labels.includes("three-week-plan"), "three-week-plan label");
+assert(createdBody.fields.labels.includes("pgl-sprint-1"), "sprint 1 from dates");
+assert(createdBody.fields.labels.includes("cynthia-email"), "custom label kept");
+assert(linked.outwardIssue.key === "PGL-205", "relates existing key");
+assert(linked.inwardIssue.key === "PGL-300", "relates new key");
+
 console.log("jira proxy tests ok");

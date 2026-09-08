@@ -55,3 +55,32 @@ export async function loadJiraIssues() {
   }
   return json.issues ?? [];
 }
+
+export async function createPglIssue(payload: {
+  summary: string;
+  description?: string;
+  owner?: "lewis" | "alok" | null;
+  start?: string | null;
+  due?: string | null;
+  parent?: string | null;
+  priority?: string;
+  labels?: string[];
+  related?: string[];
+}) {
+  const res = await fetch("/api/jira", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "create", ...payload }),
+  });
+  const json = (await res.json()) as {
+    error?: string;
+    key?: string;
+    url?: string;
+    issue?: LiveIssue;
+  };
+  if (!res.ok) {
+    throw new Error(json.error || `Jira ${res.status}`);
+  }
+  if (!json.key) throw new Error("Jira did not return a key");
+  return { key: json.key, url: json.url || "", issue: json.issue };
+}

@@ -174,7 +174,8 @@ h1 {
 }
 
 .toolbar .ok,
-.toolbar .refresh {
+.toolbar .refresh,
+.toolbar .add {
   color: var(--ink);
   border: 1px solid var(--line);
   padding: 8px 12px;
@@ -195,6 +196,13 @@ h1 {
 
 .toolbar .refresh {
   cursor: pointer;
+}
+
+.toolbar .add {
+  cursor: pointer;
+  border-color: var(--lewis);
+  color: var(--lewis);
+  font-weight: 600;
 }
 
 .toolbar .refresh:disabled {
@@ -864,6 +872,147 @@ dt {
   font-size: 0.9rem;
   max-width: 420px;
   box-shadow: 0 16px 40px rgb(0 0 0 / 35%);
+}
+
+.idea-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgb(4 12 16 / 62%);
+  z-index: 40;
+  display: grid;
+  place-items: start center;
+  padding: 36px 16px 24px;
+  overflow: auto;
+}
+
+.idea-modal {
+  width: min(720px, 100%);
+  background: #102833;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 18px 18px 16px;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 45%);
+}
+
+.idea-modal h2 {
+  margin: 0 72px 4px 0;
+}
+
+.idea-modal .sub {
+  margin: 0 0 12px;
+}
+
+.idea-log {
+  display: grid;
+  gap: 8px;
+  max-height: min(36vh, 320px);
+  overflow: auto;
+  padding: 4px 2px 8px;
+}
+
+.idea-bubble {
+  margin: 0;
+  max-width: 92%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.idea-bubble.assistant {
+  background: #0b1d25;
+  border: 1px solid var(--line);
+}
+
+.idea-bubble.user {
+  justify-self: end;
+  background: rgb(62 207 180 / 16%);
+  border: 1px solid var(--lewis);
+}
+
+.idea-bubble.thinking {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.idea-card {
+  margin: 8px 0 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--lewis);
+  border-radius: 14px;
+  background: #0b1d25;
+}
+
+.idea-card h3 {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+}
+
+.idea-desc {
+  margin: 0 0 8px;
+  color: var(--muted);
+  white-space: pre-wrap;
+  line-height: 1.4;
+}
+
+.idea-compose {
+  display: grid;
+  gap: 10px;
+}
+
+.idea-compose textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 72px;
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.idea-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.idea-actions button {
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.idea-actions button.create {
+  border-color: var(--lewis);
+  background: var(--lewis);
+  color: var(--lewis-ink);
+  font-weight: 600;
+}
+
+.idea-actions button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.idea-created {
+  margin: 12px 0 0;
+}
+
+.idea-created a {
+  color: var(--lewis);
+}
+
+.idea-error {
+  margin: 8px 0 0;
+  color: var(--alok);
+  font-size: 0.9rem;
 }
 
 @media (max-width: 800px) {

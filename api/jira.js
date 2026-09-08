@@ -242,6 +242,108 @@ async function transitionIssue(headers, key, action) {
   return { status: 200, json: { key, status: picked.to?.name || label } };
 }
 
+function toAdf(text) {
+  const lines = String(text || "").split("\n");
+  const content = [];
+  let buf = [];
+  function flush() {
+    const para = buf.join("\n").trim();
+    buf = [];
+    if (!para) return;
+    content.push({
+      type: "paragraph",
+      content: para.split("\n").flatMap((line, i) => {
+        const node = { type: "text", text: line || " " };
+        return i === 0 ? [node] : [{ type: "hardBreak" }, node];
+      }),
+    });
+  }
+  for (const line of lines) {
+    if (line.trim() === "") flush();
+    else buf.push(line);
+  }
+  flush();
+  if (!content.length) content.push({ type: "paragraph", content: [{ type: "text", text: " " }] });
+  return { type: "doc", version: 1, content };
+}
+
+function isoDate(value) {
+  const s = String(value || "");
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+}
+
+async function createIssue(headers, payload) {
+  const summary = String(payload.summary || "").trim().slice(0, 255);
+  if (summary.length < 8) return { status: 400, json: { error: "Summary is too short" } };
+
+  const owner = payload.owner === "lewis" || payload.owner === "alok" ? payload.owner : null;
+  const start = isoDate(payload.start);
+  const due = isoDate(payload.due) || start;
+  const parent = String(payload.parent || "").toUpperCase();
+  const labels = Array.isArray(payload.labels)
+    ? payload.labels.map((l) => String(l).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 40)).filter(Boolean).slice(0, 12)
+    : [];
+  const sprint = sprintLabel(start || due);
+  if (sprint && !labels.includes(sprint)) labels.push(sprint);
+  for (const keep of ["go-live", "three-week-plan"]) {
+    if (!labels.includes(keep)) labels.push(keep);
+  }
+
+  const fields = {
+    project: { key: "PGL" },
+    issuetype: { name: "Task" },
+    summary,
+    description: toAdf(payload.description || summary),
+    labels,
+  };
+  if (KEY_RE.test(parent)) fields.parent = { key: parent };
+  if (start) fields[START_FIELD] = start;
+  if (due) fields.duedate = due;
+  if (owner === "lewis") fields.assignee = { accountId: LEWIS };
+  if (owner === "alok") fields.assignee = { accountId: ALOK };
+  const priority = String(payload.priority || "");
+  if (/^(Highest|High|Medium|Low|Lowest)$/.test(priority)) fields.priority = { name: priority };
+
+  const posted = await fetch(`${JIRA}/rest/api/3/issue`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ fields }),
+  });
+  if (!posted.ok) {
+    const text = await posted.text();
+    return { status: posted.status, json: { error: `Jira create failed (${posted.status})`, detail: text.slice(0, 400) } };
+  }
+  const created = await posted.json();
+  const key = created.key;
+  if (!KEY_RE.test(String(key || ""))) {
+    return { status: 502, json: { error: "Jira did not return a PGL key" } };
+  }
+  const related = Array.isArray(payload.related) ? payload.related : [];
+  for (const other of related) {
+    const k = String(other || "").toUpperCase();
+    if (!KEY_RE.test(k) || k === key) continue;
+    await fetch(`${JIRA}/rest/api/3/issueLink`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        type: { name: "Relates" },
+        inwardIssue: { key },
+        outwardIssue: { key: k },
+      }),
+    }).catch(() => null);
+  }
+
+  const got = await fetch(
+    `${JIRA}/rest/api/3/issue/${key}?fields=${ISSUE_FIELDS.join(",")}`,
+    { headers },
+  );
+  if (!got.ok) {
+    return { status: 200, json: { key, url: `${JIRA}/browse/${key}` } };
+  }
+  const issue = mapJiraIssue(await got.json());
+  return { status: 200, json: { key, url: issue.url, issue } };
+}
+
 export async function handleJiraRequest({ method, body }) {
   if (method === "OPTIONS") return { status: 204, json: {} };
 
@@ -270,6 +372,10 @@ export async function handleJiraRequest({ method, body }) {
     }
   }
   payload = payload || {};
+
+  if (payload.action === "create") {
+    return createIssue(headers, payload);
+  }
 
   const key = String(payload.key || "").toUpperCase();
   if (!KEY_RE.test(key)) return { status: 400, json: { error: "Only PGL issues can be moved" } };

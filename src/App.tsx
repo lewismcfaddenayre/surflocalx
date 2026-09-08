@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import plan from "./data/pgl.json";
+import { IdeaModal } from "./IdeaModal";
 import { loadJiraIssues, updateJiraIssue, type LiveIssue } from "./jira";
 
 type Owner = "lewis" | "alok" | "other";
@@ -215,6 +216,7 @@ export default function App() {
   const [busy, setBusy] = useState<string | null>(null);
   const [dropRange, setDropRange] = useState<DropRange | null>(null);
   const [dayOpen, setDayOpen] = useState<string | null>(null);
+  const [ideaOpen, setIdeaOpen] = useState(false);
   const [statusSync, setStatusSync] = useState<"idle" | "loading" | "ok" | "error">("idle");
   const dragged = useRef(false);
   const dragMeta = useRef<DragMeta | null>(null);
@@ -516,6 +518,9 @@ export default function App() {
         <span className={`ok ${statusSync === "ok" ? "on" : ""}`}>
           {statusSync === "loading" ? "Syncing Jira…" : statusSync === "ok" ? "Jira live" : statusSync === "error" ? "Jira sync failed" : "Jira"}
         </span>
+        <button type="button" className="add" onClick={() => setIdeaOpen(true)}>
+          Add task
+        </button>
         <button type="button" className="refresh" onClick={() => void refreshIssues()} disabled={statusSync === "loading"}>
           Refresh
         </button>
@@ -792,6 +797,31 @@ export default function App() {
             )}
           </div>
         </div>
+      )}
+
+      {ideaOpen && (
+        <IdeaModal
+          catalog={items
+            .filter((issue) => !issue.sprintEpic)
+            .map((issue) => ({
+              key: issue.key,
+              summary: issue.summary,
+              parent: issue.parent,
+              track: issue.track,
+              start: issue.start,
+              due: issue.due,
+              owner: issue.owner,
+              type: issue.type,
+            }))}
+          onClose={() => setIdeaOpen(false)}
+          onCreated={(issue) => {
+            setItems((prev) => (prev.some((row) => row.key === issue.key) ? prev : [fromLive(issue), ...prev]));
+            setSelected(fromLive(issue));
+            setIdeaOpen(false);
+            flash(`${issue.key} created in Jira`);
+            void refreshIssues();
+          }}
+        />
       )}
 
       {toast && <div className="toast">{toast}</div>}
