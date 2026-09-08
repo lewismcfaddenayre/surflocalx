@@ -92,28 +92,7 @@ async function postIdea(
 }
 
 async function pollIdea(agentId: string, runId: string, signal: AbortSignal): Promise<IdeaJson> {
-  const ac = new AbortController();
-  const timer = window.setTimeout(() => ac.abort(), 8000);
-  const onAbort = () => ac.abort();
-  signal.addEventListener("abort", onAbort, { once: true });
-  try {
-    const res = await fetch(`/api/idea?agentId=${encodeURIComponent(agentId)}&runId=${encodeURIComponent(runId)}`, {
-      signal: ac.signal,
-    });
-    const json = (await res.json()) as IdeaJson;
-    if (!res.ok) throw new Error(json.error || `Idea ${res.status}`);
-    return json;
-  } catch (err) {
-    if (err instanceof DOMException && err.name === "AbortError") {
-      if (signal.aborted) throw err;
-      throw new Error("Scoping timed out. Try again.");
-    }
-    if (err instanceof Error && err.message) throw err;
-    throw new Error("Lost the connection while scoping. Try again.");
-  } finally {
-    window.clearTimeout(timer);
-    signal.removeEventListener("abort", onAbort);
-  }
+  return postIdea({ action: "status", agentId, runId }, { signal, timeoutMs: 8000 });
 }
 
 function sleep(ms: number, signal: AbortSignal) {
