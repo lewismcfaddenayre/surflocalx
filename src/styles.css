@@ -535,9 +535,9 @@ button.head:focus-visible {
 
 .chip-top {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 3px 4px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
   min-width: 0;
 }
 
@@ -545,7 +545,6 @@ button.head:focus-visible {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex: 0 1 auto;
 }
 
 .chip-title {
@@ -562,30 +561,30 @@ button.head:focus-visible {
 .status-label {
   display: inline-flex;
   align-items: center;
-  flex: 0 1 auto;
+  justify-content: center;
   min-width: 0;
   max-width: 100%;
-  padding: 1px 6px;
-  border-radius: 999px;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  line-height: 1.35;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  line-height: 1.25;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  background: rgb(7 19 26 / 55%);
-  color: #e7f4f1;
+  background: #eef3f1;
+  color: #07131a;
 }
 
 .status-label.st-backlog {
-  background: rgb(7 19 26 / 42%);
-  color: #d7ebe6;
+  background: #eef3f1;
+  color: #07131a;
 }
 
 .status-label.st-to-do {
-  background: #1c3d48;
-  color: #c5e0f5;
+  background: #c5e0f5;
+  color: #0b1d25;
 }
 
 .status-label.st-in-progress,
@@ -600,14 +599,18 @@ button.head:focus-visible {
   color: var(--lewis);
 }
 
+.chip .status-label {
+  align-self: stretch;
+}
+
 .chip.tiny .status-label {
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .drawer .status-label,
 .day-meta .status-label {
-  font-size: 0.72rem;
-  padding: 2px 8px;
+  font-size: 0.78rem;
+  padding: 3px 9px;
 }
 
 .chip:active {
