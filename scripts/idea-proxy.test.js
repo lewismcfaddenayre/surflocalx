@@ -4,6 +4,8 @@ function assert(cond, msg) {
   if (!cond) throw new Error(msg);
 }
 
+delete process.env.IDEA_MOCK;
+
 const sample = `Suggested outcome: provision the Acme sending domain this week.
 
 \`\`\`ticket
