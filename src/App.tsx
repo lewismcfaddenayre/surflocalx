@@ -140,6 +140,19 @@ function statusClass(status: string) {
   return status.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "unknown";
 }
 
+function statusLabel(status: string) {
+  const s = status.trim();
+  if (/^in progress$/i.test(s) || /^in development$/i.test(s)) return "In progress";
+  if (/^to do$/i.test(s) || /^todo$/i.test(s)) return "To do";
+  if (/^done$/i.test(s) || /^closed$/i.test(s)) return "Done";
+  if (/^backlog$/i.test(s)) return "Backlog";
+  return s || "Unknown";
+}
+
+function StatusLabel({ status }: { status: string }) {
+  return <span className={`status-label st-${statusClass(status)}`}>{statusLabel(status)}</span>;
+}
+
 function isDone(status: string) {
   return /^done$/i.test(status);
 }
@@ -582,18 +595,24 @@ export default function App() {
 
       <div className="legend">
         <span className="chip lewis tiny">
-          <span className="chip-key">Lewis</span>
+          <span className="chip-top">
+            <span className="chip-key">Lewis</span>
+            <StatusLabel status="In Progress" />
+          </span>
           <span className="chip-title">title</span>
-          <span className="chip-st">status</span>
         </span>
         <span className="chip alok tiny">
-          <span className="chip-key">Alok</span>
+          <span className="chip-top">
+            <span className="chip-key">Alok</span>
+            <StatusLabel status="To Do" />
+          </span>
           <span className="chip-title">title</span>
-          <span className="chip-st">status</span>
         </span>
         <span className="chip lewis tiny critical">
-          <span className="chip-key">Critical</span>
-          <span className="chip-st">gold ring</span>
+          <span className="chip-top">
+            <span className="chip-key">Critical</span>
+            <StatusLabel status="Done" />
+          </span>
         </span>
         <span>Drag the pill to move. Drag edges to span days. Click a date for that day’s work.</span>
       </div>
@@ -695,7 +714,9 @@ export default function App() {
             </div>
             <div>
               <dt>Status</dt>
-              <dd className={`st-${statusClass(selected.status)}`}>{selected.status}</dd>
+              <dd>
+                <StatusLabel status={selected.status} />
+              </dd>
             </div>
             <div>
               <dt>Start</dt>
@@ -821,7 +842,7 @@ export default function App() {
                       <p className="day-title">{issue.summary}</p>
                       <p className="day-meta">
                         <span>{issue.assignee}</span>
-                        <span className={`st-${statusClass(issue.status)}`}>{issue.status}</span>
+                        <StatusLabel status={issue.status} />
                         <span>
                           {issue.start || issue.due} → {issue.due || issue.start}
                         </span>
@@ -999,9 +1020,11 @@ function Lane({
                 onDragStart={(e) => beginDrag(e, issue, "move")}
                 onClick={() => onSelect(issue)}
               >
-                <span className="chip-key">{issue.key.replace("PGL-", "")}</span>
+                <span className="chip-top">
+                  <span className="chip-key">{issue.key.replace("PGL-", "")}</span>
+                  <StatusLabel status={issue.status} />
+                </span>
                 <span className="chip-title">{issue.summary}</span>
-                <span className={`chip-st st-${statusClass(issue.status)}`}>{issue.status}</span>
               </button>
               <span
                 className="chip-resize"

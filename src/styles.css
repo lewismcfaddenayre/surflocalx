@@ -533,10 +533,19 @@ button.head:focus-visible {
   min-width: 0;
 }
 
+.chip-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px 4px;
+  min-width: 0;
+}
+
 .chip-key {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 0 1 auto;
 }
 
 .chip-title {
@@ -550,24 +559,56 @@ button.head:focus-visible {
   overflow: hidden;
 }
 
-.chip-st {
-  font-size: 8px;
-  font-weight: 600;
+.status-label {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
   letter-spacing: 0.02em;
-  text-transform: uppercase;
-  opacity: 0.82;
+  line-height: 1.35;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.1;
+  background: rgb(7 19 26 / 55%);
+  color: #e7f4f1;
 }
 
-.st-backlog { opacity: 0.75; }
-.st-to-do { color: inherit; }
-.st-in-progress,
-.st-in-development { text-decoration: underline; text-underline-offset: 1px; }
-.st-done,
-.st-closed { opacity: 1; }
+.status-label.st-backlog {
+  background: rgb(7 19 26 / 42%);
+  color: #d7ebe6;
+}
+
+.status-label.st-to-do {
+  background: #1c3d48;
+  color: #c5e0f5;
+}
+
+.status-label.st-in-progress,
+.status-label.st-in-development {
+  background: var(--gold);
+  color: #2a1908;
+}
+
+.status-label.st-done,
+.status-label.st-closed {
+  background: #042822;
+  color: var(--lewis);
+}
+
+.chip.tiny .status-label {
+  font-size: 9px;
+}
+
+.drawer .status-label,
+.day-meta .status-label {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+}
 
 .chip:active {
   cursor: grabbing;
