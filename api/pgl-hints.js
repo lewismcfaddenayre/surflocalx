@@ -212,7 +212,9 @@ export const TRACK_BY_KEY = {
   "PGL-210": "ai",
   "PGL-211": "ai",
   "PGL-212": "ai",
-  "PGL-213": "ai"
+  "PGL-213": "ai",
+  "PGL-214": "email",
+  "PGL-215": "email"
 };
 
 export const EPIC_TRACK = {
