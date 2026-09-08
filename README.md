@@ -20,7 +20,7 @@ Override with `SITE_USER` / `SITE_PASSWORD` on Vercel if you want to change it.
 
 ## Jira writes
 
-The serverless `/api/jira` proxy uses `JIRA_EMAIL` + `JIRA_API_TOKEN` on the server. Drag a pill to move it (keeps duration). Drag the left or right edge across days to set Start and Due. Click a date header for that day’s tickets; **In progress** and **Done** (also in the drawer) transition Jira. People-view drops and Assign buttons update assignee. Status, Start and Due are loaded live from Jira on refresh.
+The serverless `/api/jira` proxy uses `JIRA_EMAIL` + `JIRA_API_TOKEN` on the server. On load and Refresh, the Gantt replaces its board with the live PGL issue list from Jira (new tickets appear, deleted tickets drop off). The bundled snapshot is only the fallback if Jira is unreachable. Drag a pill to move it (keeps duration). Drag the left or right edge across days to set Start and Due. Click a date header for that day’s tickets; **In progress** and **Done** (also in the drawer) transition Jira. People-view drops and Assign buttons update assignee.
 
 ## Local
 

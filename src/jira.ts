@@ -27,12 +27,29 @@ export async function updateJiraIssue(payload: {
   return json;
 }
 
-export async function loadJiraStatuses() {
+export type LiveIssue = {
+  key: string;
+  summary: string;
+  type: string;
+  parent: string | null;
+  start: string | null;
+  due: string | null;
+  owner: "lewis" | "alok" | "other";
+  assignee: string;
+  sprint: string;
+  track: string;
+  priority: string;
+  status: string;
+  blocks: string[];
+  blockedBy: string[];
+  critical: boolean;
+  sprintEpic: boolean;
+  url: string;
+};
+
+export async function loadJiraIssues() {
   const res = await fetch("/api/jira");
-  const json = (await res.json()) as {
-    error?: string;
-    issues?: { key: string; status: string; start?: string | null; due?: string | null }[];
-  };
+  const json = (await res.json()) as { error?: string; issues?: LiveIssue[] };
   if (!res.ok) {
     throw new Error(json.error || `Jira ${res.status}`);
   }

@@ -1,11 +1,36 @@
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { CRITICAL_KEYS, EPIC_TRACK, SPRINT_EPICS, TRACK_BY_KEY } from "./pgl-hints.js";
 
 const JIRA = "https://surflokal.atlassian.net";
 const START_FIELD = "customfield_10015";
 const KEY_RE = /^PGL-\d+$/;
 const LEWIS = "712020:2f293e75-b704-4d2e-a459-a0ee035ecc92";
 const ALOK = "712020:87fcff65-f8a7-4c99-a7c8-7b06fc2ccdc7";
+const TRACK_IDS = new Set(["mls", "funnel", "email", "ai", "vault", "launch", "product"]);
+const SPRINT_EPIC_SET = new Set(SPRINT_EPICS);
+const CRITICAL_SET = new Set(CRITICAL_KEYS);
+const ISSUE_FIELDS = [
+  "summary",
+  "issuetype",
+  "parent",
+  START_FIELD,
+  "duedate",
+  "assignee",
+  "labels",
+  "priority",
+  "status",
+  "issuelinks",
+];
+const TRACK_KEYWORDS = [
+  [/\b(mls|idx|stellar|co-list|listing feed)\b/i, "mls"],
+  [/\b(email|sms|10dlc|right to send|suppression)\b/i, "email"],
+  [/\b(cynthia|model isolation|profiling)\b/i, "ai"],
+  [/\b(vault|surfscore|surf score)\b/i, "vault"],
+  [/\b(funnel|fusion|partnerresolver|deal room|optimal blue|marketplace|loan.?officer)\b/i, "funnel"],
+  [/\b(aws|app store|legal web|nmls|dmca|enumeration)\b/i, "launch"],
+  [/\b(agent app|consumer app|property details)\b/i, "product"],
+];
 
 function loadDotEnv() {
   for (const name of [".env.local", ".env"]) {
@@ -41,6 +66,81 @@ function sprintId(iso) {
   return label ? label.slice(-1) : "";
 }
 
+function sprintFromLabels(labels, iso) {
+  const found = (labels || []).map((l) => String(l).match(/^pgl-sprint-([123])$/)).find(Boolean);
+  if (found) return found[1];
+  return sprintId(iso);
+}
+
+function ownerFromAssignee(assignee) {
+  const accountId = assignee?.accountId || "";
+  if (accountId === LEWIS) return { owner: "lewis", assignee: assignee.displayName || "Lewis McFadden" };
+  if (accountId === ALOK) return { owner: "alok", assignee: assignee.displayName || "Alok Ranjan" };
+  return { owner: "other", assignee: assignee?.displayName || "Unassigned" };
+}
+
+function trackFromText(summary, labels) {
+  for (const label of labels || []) {
+    const id = String(label).replace(/^pgl-track-/, "");
+    if (TRACK_IDS.has(id)) return id;
+  }
+  const hay = String(summary || "");
+  for (const [re, id] of TRACK_KEYWORDS) {
+    if (re.test(hay)) return id;
+  }
+  return null;
+}
+
+function inferTrack(key, parent, summary, labels) {
+  if (TRACK_BY_KEY[key]) return TRACK_BY_KEY[key];
+  if (parent && (TRACK_BY_KEY[parent] || EPIC_TRACK[parent])) return TRACK_BY_KEY[parent] || EPIC_TRACK[parent];
+  return trackFromText(summary, labels) || EPIC_TRACK[key] || "other";
+}
+
+function linkKeys(links, side) {
+  const out = [];
+  for (const link of links || []) {
+    const name = String(link.type?.name || "");
+    const inward = String(link.type?.inward || "");
+    const outward = String(link.type?.outward || "");
+    if (!/block/i.test(`${name} ${inward} ${outward}`)) continue;
+    const key = side === "blocks" ? link.outwardIssue?.key : link.inwardIssue?.key;
+    if (key) out.push(key);
+  }
+  return out;
+}
+
+export function mapJiraIssue(issue) {
+  const fields = issue.fields || {};
+  const key = issue.key;
+  const labels = fields.labels || [];
+  const start = fields[START_FIELD] || null;
+  const due = fields.duedate || null;
+  const parent = fields.parent?.key || null;
+  const people = ownerFromAssignee(fields.assignee);
+  const sprintEpic = SPRINT_EPIC_SET.has(key);
+  const known = Object.prototype.hasOwnProperty.call(TRACK_BY_KEY, key);
+  return {
+    key,
+    summary: fields.summary || key,
+    type: String(fields.issuetype?.name || "story").toLowerCase(),
+    parent,
+    start,
+    due,
+    owner: people.owner,
+    assignee: people.assignee,
+    sprint: sprintFromLabels(labels, start || due),
+    track: inferTrack(key, parent, fields.summary, labels),
+    priority: fields.priority?.name || "Medium",
+    status: fields.status?.name || "Unknown",
+    blocks: linkKeys(fields.issuelinks, "blocks"),
+    blockedBy: linkKeys(fields.issuelinks, "blockedBy"),
+    critical: known ? CRITICAL_SET.has(key) : !sprintEpic && /^highest$/i.test(fields.priority?.name || ""),
+    sprintEpic,
+    url: `${JIRA}/browse/${key}`,
+  };
+}
+
 function jiraHeaders() {
   const email = process.env.JIRA_EMAIL || "lewis@surflocalexchange.com";
   const token = process.env.JIRA_API_TOKEN || "";
@@ -52,11 +152,11 @@ function jiraHeaders() {
   };
 }
 
-async function listStatuses(headers) {
+async function listIssues(headers) {
   const issues = [];
   let nextPageToken;
   do {
-    const body = { jql: "project = PGL ORDER BY key", fields: ["status", START_FIELD, "duedate"], maxResults: 100 };
+    const body = { jql: "project = PGL ORDER BY key", fields: ISSUE_FIELDS, maxResults: 100 };
     if (nextPageToken) body.nextPageToken = nextPageToken;
     const res = await fetch(`${JIRA}/rest/api/3/search/jql`, {
       method: "POST",
@@ -68,14 +168,7 @@ async function listStatuses(headers) {
       return { errorStatus: res.status, detail: text.slice(0, 400) };
     }
     const data = await res.json();
-    for (const issue of data.issues || []) {
-      issues.push({
-        key: issue.key,
-        status: issue.fields?.status?.name || "Unknown",
-        start: issue.fields?.[START_FIELD] || null,
-        due: issue.fields?.duedate || null,
-      });
-    }
+    for (const issue of data.issues || []) issues.push(mapJiraIssue(issue));
     nextPageToken = data.isLast ? null : data.nextPageToken;
   } while (nextPageToken);
   return { issues };
@@ -145,7 +238,7 @@ export async function handleJiraRequest({ method, body }) {
   if (!headers) return { status: 503, json: { error: "Jira token is not configured on the server" } };
 
   if (method === "GET") {
-    const listed = await listStatuses(headers);
+    const listed = await listIssues(headers);
     if (listed.errorStatus) {
       return {
         status: listed.errorStatus,

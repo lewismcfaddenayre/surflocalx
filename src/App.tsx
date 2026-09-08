@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import plan from "./data/pgl.json";
-import { loadJiraStatuses, updateJiraIssue } from "./jira";
+import { loadJiraIssues, updateJiraIssue, type LiveIssue } from "./jira";
 
 type Owner = "lewis" | "alok" | "other";
 type Issue = {
@@ -119,7 +119,7 @@ function issueLane(issue: Issue, view: View) {
   if (view === "people") return issue.owner;
   if (view === "critical") return "critical";
   if (view === "epics") return issue.parent || issue.key;
-  return issue.track;
+  return plan.tracks.some((t) => t.id === issue.track) ? issue.track : "other";
 }
 
 function issueRange(issue: Issue): [string, string] | null {
@@ -229,10 +229,14 @@ export default function App() {
 
   const lanes = useMemo(() => {
     if (view === "people") {
-      return [
+      const lanes = [
         { id: "lewis", name: "Lewis", hint: "Drop on a day to assign" },
         { id: "alok", name: "Alok", hint: "Drop on a day to assign" },
       ];
+      if (items.some((i) => i.owner === "other" && !i.sprintEpic && i.type !== "epic")) {
+        lanes.push({ id: "other", name: "Other", hint: "Unassigned or someone else" });
+      }
+      return lanes;
     }
     if (view === "epics") {
       return items
@@ -246,7 +250,11 @@ export default function App() {
     if (view === "critical") {
       return [{ id: "critical", name: "Critical path", hint: "Drag across days to span" }];
     }
-    return plan.tracks;
+    const tracks = [...plan.tracks];
+    if (items.some((i) => !i.sprintEpic && i.type !== "epic" && (i.track === "other" || !plan.tracks.some((t) => t.id === i.track)))) {
+      tracks.push({ id: "other", name: "Other", hint: "New tickets not yet on a track" });
+    }
+    return tracks;
   }, [view, items]);
 
   const byLane = useMemo(() => {
@@ -266,8 +274,9 @@ export default function App() {
       lewis: visible.filter((i) => i.owner === "lewis").length,
       alok: visible.filter((i) => i.owner === "alok").length,
       critical: visible.filter((i) => i.critical).length,
+      undated: items.filter((i) => !i.sprintEpic && i.type !== "epic" && !i.start && !i.due).length,
     }),
-    [visible],
+    [visible, items],
   );
 
   const openByDay = useMemo(() => {
@@ -309,53 +318,44 @@ export default function App() {
     setSelected((cur) => (cur?.key === key ? { ...cur, ...patch } : cur));
   }
 
-  async function refreshStatuses() {
+  function fromLive(row: LiveIssue, prev?: Issue, keepDates?: boolean): Issue {
+    const start = keepDates && prev ? prev.start : row.start;
+    const due = keepDates && prev ? prev.due : row.due;
+    const sprintDay = start || due;
+    return {
+      ...row,
+      start,
+      due,
+      sprint: sprintDay ? sprintFor(sprintDay) || row.sprint : row.sprint,
+    };
+  }
+
+  async function refreshIssues() {
     const epoch = dateEpoch.current;
     setStatusSync("loading");
     try {
-      const live = await loadJiraStatuses();
-      const byKey = new Map(live.map((row) => [row.key, row]));
+      const live = await loadJiraIssues();
+      if (!live.length) throw new Error("Jira returned no PGL issues");
       const liveDates = epoch === dateEpoch.current;
-      setItems((prev) =>
-        prev.map((issue) => {
-          const row = byKey.get(issue.key);
-          if (!row) return issue;
-          const start = liveDates ? row.start || row.due || issue.start : issue.start;
-          const due = liveDates ? row.due || row.start || issue.due : issue.due;
-          const sprintDay = start || due;
-          return {
-            ...issue,
-            status: row.status || issue.status,
-            start,
-            due,
-            sprint: sprintDay ? sprintFor(sprintDay) || issue.sprint : issue.sprint,
-          };
-        }),
-      );
+      setItems((prev) => {
+        const byPrev = new Map(prev.map((issue) => [issue.key, issue]));
+        return live.map((row) => fromLive(row, byPrev.get(row.key), !liveDates));
+      });
       setSelected((cur) => {
         if (!cur) return cur;
-        const row = byKey.get(cur.key);
-        if (!row) return cur;
-        const start = liveDates ? row.start || row.due || cur.start : cur.start;
-        const due = liveDates ? row.due || row.start || cur.due : cur.due;
-        const sprintDay = start || due;
-        return {
-          ...cur,
-          status: row.status || cur.status,
-          start,
-          due,
-          sprint: sprintDay ? sprintFor(sprintDay) || cur.sprint : cur.sprint,
-        };
+        const row = live.find((issue) => issue.key === cur.key);
+        if (!row) return null;
+        return fromLive(row, cur, !liveDates);
       });
       setStatusSync("ok");
     } catch (err) {
       setStatusSync("error");
-      flash(err instanceof Error ? err.message : "Could not load Jira statuses");
+      flash(err instanceof Error ? err.message : "Could not load Jira issues");
     }
   }
 
   useEffect(() => {
-    void refreshStatuses();
+    void refreshIssues();
   }, []);
 
   async function commitRange(key: string, nextStart: string, nextDue: string, nextOwner?: Owner) {
@@ -511,11 +511,12 @@ export default function App() {
         <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search PGL-109, SMS, Vault…" />
         <p className="meta">
           {visible.length} items · {counts.critical} on the critical path
+          {counts.undated ? ` · ${counts.undated} without dates` : ""}
         </p>
         <span className={`ok ${statusSync === "ok" ? "on" : ""}`}>
           {statusSync === "loading" ? "Syncing Jira…" : statusSync === "ok" ? "Jira live" : statusSync === "error" ? "Jira sync failed" : "Jira"}
         </span>
-        <button type="button" className="refresh" onClick={() => void refreshStatuses()} disabled={statusSync === "loading"}>
+        <button type="button" className="refresh" onClick={() => void refreshIssues()} disabled={statusSync === "loading"}>
           Refresh
         </button>
       </div>

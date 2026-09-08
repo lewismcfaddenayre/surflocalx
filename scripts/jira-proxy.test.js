@@ -1,4 +1,4 @@
-import { handleJiraRequest, sprintLabel } from "../api/jira.js";
+import { handleJiraRequest, mapJiraIssue, sprintLabel } from "../api/jira.js";
 
 function assert(cond, msg) {
   if (!cond) throw new Error(msg);
@@ -31,9 +31,11 @@ const empty = await handleJiraRequest({
 assert(empty.status === 400, "nothing to update");
 
 let fetches = 0;
+let searchBody;
 globalThis.fetch = async (url, init) => {
   fetches += 1;
   if (String(url).includes("search/jql")) {
+    searchBody = JSON.parse(init.body);
     return {
       ok: true,
       status: 200,
@@ -43,9 +45,24 @@ globalThis.fetch = async (url, init) => {
           {
             key: "PGL-109",
             fields: {
+              summary: "UAT#118 Anon MLS feed strips PII",
+              issuetype: { name: "Story" },
+              parent: { key: "PGL-25" },
               status: { name: "In Progress" },
               customfield_10015: "2026-09-10",
               duedate: "2026-09-12",
+              assignee: {
+                accountId: "712020:2f293e75-b704-4d2e-a459-a0ee035ecc92",
+                displayName: "Lewis McFadden",
+              },
+              labels: ["pgl-sprint-1", "go-live"],
+              priority: { name: "High" },
+              issuelinks: [
+                {
+                  type: { name: "Blocks", inward: "is blocked by", outward: "blocks" },
+                  inwardIssue: { key: "PGL-90" },
+                },
+              ],
             },
           },
         ],
@@ -101,9 +118,21 @@ globalThis.fetch = async (url, init) => {
 
 const listed = await handleJiraRequest({ method: "GET", body: "" });
 assert(listed.status === 200, "status list");
+assert(searchBody.fields.includes("summary"), "GET asks for full issue fields");
+assert(searchBody.fields.includes("parent"), "GET asks for parent");
+assert(searchBody.fields.includes("issuelinks"), "GET asks for links");
 assert(listed.json.issues[0].status === "In Progress", "live status");
 assert(listed.json.issues[0].start === "2026-09-10", "live start");
 assert(listed.json.issues[0].due === "2026-09-12", "live due");
+assert(listed.json.issues[0].summary.includes("Anon MLS"), "live summary");
+assert(listed.json.issues[0].parent === "PGL-25", "live parent");
+assert(listed.json.issues[0].owner === "lewis", "live owner");
+assert(listed.json.issues[0].track === "email", "snapshot track kept");
+assert(listed.json.issues[0].sprint === "1", "sprint from label");
+assert(listed.json.issues[0].blockedBy.includes("PGL-90"), "blocked-by link");
+assert(listed.json.issues[0].url.includes("PGL-109"), "browse url");
+assert(listed.json.issues[0].sprintEpic === false, "not a sprint epic");
+assert(listed.json.issues[0].critical === true, "snapshot critical kept");
 
 const ok = await handleJiraRequest({
   method: "POST",
@@ -224,5 +253,71 @@ const alreadyProgress = await handleJiraRequest({
 });
 assert(alreadyProgress.status === 200 && alreadyProgress.json.status === "In Progress", "already in progress");
 assert(progressFetches === 1, "already in progress reads once");
+
+const mapped = mapJiraIssue({
+  key: "PGL-205",
+  fields: {
+    summary: "New Deal Room follow-up",
+    issuetype: { name: "Story" },
+    parent: { key: "PGL-22" },
+    status: { name: "Backlog" },
+    customfield_10015: "2026-09-16",
+    duedate: "2026-09-16",
+    assignee: { accountId: "acct-someone", displayName: "Pat" },
+    labels: ["pgl-sprint-2"],
+    priority: { name: "Highest" },
+    issuelinks: [
+      {
+        type: { name: "Blocks", inward: "is blocked by", outward: "blocks" },
+        outwardIssue: { key: "PGL-90" },
+      },
+    ],
+  },
+});
+assert(mapped.track === "funnel", "new ticket inherits parent epic track");
+assert(mapped.owner === "other", "unknown assignee is other");
+assert(mapped.assignee === "Pat", "display name kept");
+assert(mapped.critical === true, "new Highest is critical");
+assert(mapped.sprint === "2", "sprint from label");
+assert(mapped.blocks.includes("PGL-90"), "blocks link");
+assert(mapped.sprintEpic === false, "new story is not a sprint epic");
+
+const sprintEpic = mapJiraIssue({
+  key: "PGL-202",
+  fields: {
+    summary: "Sprint 1 — Foundations",
+    issuetype: { name: "Epic" },
+    status: { name: "Backlog" },
+    customfield_10015: "2026-09-07",
+    duedate: "2026-09-13",
+    assignee: {
+      accountId: "712020:87fcff65-f8a7-4c99-a7c8-7b06fc2ccdc7",
+      displayName: "Alok Ranjan",
+    },
+    labels: ["pgl-sprint-1"],
+    priority: { name: "Highest" },
+    issuelinks: [],
+  },
+});
+assert(sprintEpic.sprintEpic === true, "week epic hidden from tracks");
+assert(sprintEpic.critical === false, "sprint epic is not critical-path");
+assert(sprintEpic.track === "launch", "sprint epic track");
+assert(sprintEpic.owner === "alok", "Alok from account id");
+assert(sprintEpic.type === "epic", "epic type");
+
+const keyworded = mapJiraIssue({
+  key: "PGL-206",
+  fields: {
+    summary: "Stand up the Vault sealed-quotes waitlist",
+    issuetype: { name: "Task" },
+    status: { name: "To Do" },
+    labels: [],
+    priority: { name: "Medium" },
+    issuelinks: [],
+  },
+});
+assert(keyworded.track === "vault", "keyword track for unknown parent");
+assert(keyworded.start === null && keyworded.due === null, "dates may be empty");
+assert(keyworded.critical === false, "medium is not critical");
 
 console.log("jira proxy tests ok");
