@@ -910,6 +910,10 @@ dt {
   padding: 4px 2px 8px;
 }
 
+.idea-log.compact {
+  max-height: 140px;
+}
+
 .idea-bubble {
   margin: 0;
   max-width: 92%;

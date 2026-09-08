@@ -290,8 +290,8 @@ export function IdeaModal({
         <h2 id="idea-title">What do you want to add to SLX?</h2>
         <p className="sub">Cursor suggests the outcome. Create in Jira stays off until you confirm.</p>
 
-        <div className="idea-log" ref={logRef}>
-          {messages.map((msg, i) => (
+        <div className={`idea-log${suggestion ? " compact" : ""}`} ref={logRef}>
+          {messages.filter((_, i) => !(i === 0 && messages.length > 1)).map((msg, i) => (
             <p key={`${msg.role}-${i}`} className={`idea-bubble ${msg.role}`}>
               {msg.text}
             </p>
