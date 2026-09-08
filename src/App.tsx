@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent } from "react";
 import plan from "./data/pgl.json";
 import { IdeaModal } from "./IdeaModal";
 import { loadJiraIssues, updateJiraIssue, type LiveIssue } from "./jira";
@@ -78,6 +78,20 @@ function clampDay(iso: string) {
   if (iso < plan.clockStart) return plan.clockStart;
   if (iso > plan.clockEnd) return plan.clockEnd;
   return iso;
+}
+
+function press(handler: () => void) {
+  return {
+    type: "button" as const,
+    onPointerDown: (e: PointerEvent<HTMLButtonElement>) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      handler();
+    },
+    onClick: (e: MouseEvent<HTMLButtonElement>) => {
+      if (e.detail === 0) handler();
+    },
+  };
 }
 
 function extraDays(start: string, due: string) {
@@ -494,19 +508,19 @@ export default function App() {
               ["critical", "Critical path"],
             ] as const
           ).map(([id, label]) => (
-            <button key={id} className={view === id ? "on" : ""} onClick={() => setView(id)}>
+            <button key={id} className={view === id ? "on" : ""} {...press(() => setView(id))}>
               {label}
             </button>
           ))}
         </div>
         <div className="seg">
-          <button className={owner === "all" ? "on" : ""} onClick={() => setOwner("all")}>
+          <button className={owner === "all" ? "on" : ""} {...press(() => setOwner("all"))}>
             Both
           </button>
-          <button className={owner === "lewis" ? "on" : ""} onClick={() => setOwner("lewis")}>
+          <button className={owner === "lewis" ? "on" : ""} {...press(() => setOwner("lewis"))}>
             Lewis {counts.lewis}
           </button>
-          <button className={owner === "alok" ? "on" : ""} onClick={() => setOwner("alok")}>
+          <button className={owner === "alok" ? "on" : ""} {...press(() => setOwner("alok"))}>
             Alok {counts.alok}
           </button>
         </div>
