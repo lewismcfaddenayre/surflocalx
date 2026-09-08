@@ -80,14 +80,40 @@ function clampDay(iso: string) {
   return iso;
 }
 
+function releaseForeignSelection(target: EventTarget | null) {
+  const el = target instanceof Element ? target : null;
+  if (el?.closest("input, textarea, [contenteditable='true']")) return;
+
+  const active = document.activeElement;
+  if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
+    try {
+      const pos = active.selectionEnd ?? active.value.length;
+      active.setSelectionRange(pos, pos);
+    } catch {
+      /* date/number inputs throw */
+    }
+    if (active !== el) active.blur();
+  }
+
+  window.getSelection()?.removeAllRanges();
+}
+
+let lastSegActivate = 0;
+
 function press(handler: () => void) {
+  const activate = (e: { button: number; preventDefault: () => void; currentTarget: EventTarget }) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    releaseForeignSelection(e.currentTarget);
+    const now = performance.now();
+    if (now - lastSegActivate < 80) return;
+    lastSegActivate = now;
+    handler();
+  };
   return {
     type: "button" as const,
-    onPointerDown: (e: PointerEvent<HTMLButtonElement>) => {
-      if (e.button !== 0) return;
-      e.preventDefault();
-      handler();
-    },
+    onPointerDown: (e: PointerEvent<HTMLButtonElement>) => activate(e),
+    onMouseDown: (e: MouseEvent<HTMLButtonElement>) => activate(e),
     onClick: (e: MouseEvent<HTMLButtonElement>) => {
       if (e.detail === 0) handler();
     },
@@ -448,6 +474,20 @@ export default function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [dayOpen]);
+
+  useEffect(() => {
+    function onDown(e: Event) {
+      const t = e.target as HTMLElement | null;
+      if (!t?.closest(".seg button")) return;
+      releaseForeignSelection(t);
+    }
+    document.addEventListener("pointerdown", onDown, true);
+    document.addEventListener("mousedown", onDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onDown, true);
+      document.removeEventListener("mousedown", onDown, true);
+    };
+  }, []);
 
   function onDragOverCell(day: string, laneId: string) {
     return (e: DragEvent) => {

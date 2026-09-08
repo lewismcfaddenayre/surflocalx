@@ -159,8 +159,6 @@ h1 {
 
 .seg button {
   touch-action: manipulation;
-  user-select: none;
-  -webkit-user-select: none;
 }
 
 .seg button:focus {
