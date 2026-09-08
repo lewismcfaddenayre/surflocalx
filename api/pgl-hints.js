@@ -203,7 +203,16 @@ export const TRACK_BY_KEY = {
   "PGL-201": "funnel",
   "PGL-202": "launch",
   "PGL-203": "launch",
-  "PGL-204": "launch"
+  "PGL-204": "launch",
+  "PGL-205": "email",
+  "PGL-206": "email",
+  "PGL-207": "email",
+  "PGL-208": "email",
+  "PGL-209": "email",
+  "PGL-210": "ai",
+  "PGL-211": "ai",
+  "PGL-212": "ai",
+  "PGL-213": "ai"
 };
 
 export const EPIC_TRACK = {

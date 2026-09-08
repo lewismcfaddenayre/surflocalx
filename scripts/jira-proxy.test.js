@@ -255,7 +255,7 @@ assert(alreadyProgress.status === 200 && alreadyProgress.json.status === "In Pro
 assert(progressFetches === 1, "already in progress reads once");
 
 const mapped = mapJiraIssue({
-  key: "PGL-205",
+  key: "PGL-298",
   fields: {
     summary: "New Deal Room follow-up",
     issuetype: { name: "Story" },
@@ -306,7 +306,7 @@ assert(sprintEpic.owner === "alok", "Alok from account id");
 assert(sprintEpic.type === "epic", "epic type");
 
 const keyworded = mapJiraIssue({
-  key: "PGL-206",
+  key: "PGL-299",
   fields: {
     summary: "Stand up the Vault sealed-quotes waitlist",
     issuetype: { name: "Task" },
@@ -319,5 +319,33 @@ const keyworded = mapJiraIssue({
 assert(keyworded.track === "vault", "keyword track for unknown parent");
 assert(keyworded.start === null && keyworded.due === null, "dates may be empty");
 assert(keyworded.critical === false, "medium is not critical");
+
+const cynthiaAi = mapJiraIssue({
+  key: "PGL-212",
+  fields: {
+    summary: "CYNTHIA Agent enablement: briefing, HOT alerts, draft approval queue",
+    issuetype: { name: "Task" },
+    parent: { key: "PGL-24" },
+    status: { name: "Backlog" },
+    labels: ["surface-cynthia", "pgl-sprint-3"],
+    priority: { name: "High" },
+    issuelinks: [],
+  },
+});
+assert(cynthiaAi.track === "ai", "Cynthia under New Build stays on AI, not product");
+
+const customerEmail = mapJiraIssue({
+  key: "PGL-205",
+  fields: {
+    summary: "CYN-EMAIL Provision customer sending domains",
+    issuetype: { name: "Task" },
+    parent: { key: "PGL-7" },
+    status: { name: "Backlog" },
+    labels: ["cynthia-email", "pgl-sprint-1"],
+    priority: { name: "High" },
+    issuelinks: [],
+  },
+});
+assert(customerEmail.track === "email", "customer email stays on Email");
 
 console.log("jira proxy tests ok");

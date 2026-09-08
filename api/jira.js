@@ -79,11 +79,20 @@ function ownerFromAssignee(assignee) {
   return { owner: "other", assignee: assignee?.displayName || "Unassigned" };
 }
 
-function trackFromText(summary, labels) {
+function trackFromLabels(labels) {
   for (const label of labels || []) {
-    const id = String(label).replace(/^pgl-track-/, "");
+    const raw = String(label);
+    if (raw === "cynthia-email") return "email";
+    if (raw === "surface-cynthia") return "ai";
+    const id = raw.replace(/^pgl-track-/, "");
     if (TRACK_IDS.has(id)) return id;
   }
+  return null;
+}
+
+function trackFromText(summary, labels) {
+  const labelled = trackFromLabels(labels);
+  if (labelled) return labelled;
   const hay = String(summary || "");
   for (const [re, id] of TRACK_KEYWORDS) {
     if (re.test(hay)) return id;
@@ -93,6 +102,8 @@ function trackFromText(summary, labels) {
 
 function inferTrack(key, parent, summary, labels) {
   if (TRACK_BY_KEY[key]) return TRACK_BY_KEY[key];
+  const labelled = trackFromLabels(labels);
+  if (labelled) return labelled;
   if (parent && (TRACK_BY_KEY[parent] || EPIC_TRACK[parent])) return TRACK_BY_KEY[parent] || EPIC_TRACK[parent];
   return trackFromText(summary, labels) || EPIC_TRACK[key] || "other";
 }
