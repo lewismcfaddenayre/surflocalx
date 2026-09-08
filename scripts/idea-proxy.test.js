@@ -1,4 +1,4 @@
-import { handleIdeaRequest, parseTicket, stripTicket } from "../api/idea.js";
+import { handleIdeaRequest, parseTicket, pickCatalog, stripTicket } from "../api/idea.js";
 
 function assert(cond, msg) {
   if (!cond) throw new Error(msg);
@@ -41,6 +41,14 @@ assert(sprintParent.priority === "Medium", "default priority");
 
 assert(parseTicket("just chatting") === null, "no ticket yet");
 assert(parseTicket(`\`\`\`ticket\n{"summary":"too"}\n\`\`\``) === null, "short summary rejected");
+
+const ranked = pickCatalog("SMS campaign", [
+  { key: "PGL-1", summary: "Agent app property details", type: "epic" },
+  { key: "PGL-209", summary: "Customer campaign SMS", type: "task", track: "email", parent: "PGL-7" },
+  { key: "PGL-90", summary: "Deal Room", type: "story", track: "funnel" },
+]);
+assert(ranked[0].key === "PGL-209", "keyword matches rank first");
+assert(ranked.length === 3, "small catalogs stay intact");
 
 const savedKey = process.env.CURSOR_API_KEY;
 delete process.env.CURSOR_API_KEY;
@@ -98,6 +106,7 @@ assert(started.status === 200, "start ok");
 assert(started.json.agentId.startsWith("bc-"), "agent id");
 assert(started.json.runId.startsWith("run-"), "run id");
 assert(createBody.mode === "plan", "plan mode");
+assert(createBody.model.params.some((p) => p.id === "fast"), "fast model");
 assert(!createBody.repos && !createBody.env, "no-repo agent");
 assert(createBody.prompt.text.includes("Human idea"), "idea in prompt");
 assert(createBody.prompt.text.includes("PGL-209"), "catalog in prompt");
@@ -125,6 +134,22 @@ const follow = await handleIdeaRequest({
   }),
 });
 assert(follow.status === 200 && follow.json.runId.endsWith("2"), "followup run");
+
+process.env.IDEA_CURSOR_TIMEOUT_MS = "40";
+globalThis.fetch = (_url, init) =>
+  new Promise((_, reject) => {
+    init.signal.addEventListener("abort", () => {
+      const err = new Error("Aborted");
+      err.name = "AbortError";
+      reject(err);
+    });
+  });
+const hung = await handleIdeaRequest({
+  method: "POST",
+  body: JSON.stringify({ text: "Add customer SMS opt-out audit before campaigns" }),
+});
+assert(hung.status === 504, "cursor timeout becomes json");
+delete process.env.IDEA_CURSOR_TIMEOUT_MS;
 
 globalThis.fetch = async (url) => {
   assert(String(url).includes("/runs/run-00000000-0000-0000-0000-000000000001"), "status url");

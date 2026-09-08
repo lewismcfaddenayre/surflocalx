@@ -36,15 +36,84 @@ type IdeaJson = {
   suggestion?: Suggestion | null;
 };
 
-async function postIdea(payload: Record<string, unknown>): Promise<IdeaJson> {
-  const res = await fetch("/api/idea", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const json = (await res.json()) as IdeaJson;
-  if (!res.ok) throw new Error(json.error || `Idea ${res.status}`);
-  return json;
+const SESSION_KEY = "pgl-idea-agent";
+
+function compactForScope(idea: string, catalog: IdeaCatalogItem[]) {
+  const words = idea.toLowerCase().match(/[a-z0-9]{3,}/g) || [];
+  function score(item: IdeaCatalogItem) {
+    const hay = `${item.key} ${item.summary} ${item.track} ${item.parent || ""}`.toLowerCase();
+    let s = item.type === "epic" ? 1 : 0;
+    for (const w of words) if (hay.includes(w)) s += 2;
+    return s;
+  }
+  return [...catalog]
+    .sort((a, b) => score(b) - score(a))
+    .slice(0, 80)
+    .map((item) => ({
+      key: item.key,
+      summary: item.summary.slice(0, 80),
+      parent: item.parent,
+      track: item.track,
+      start: item.start,
+      due: item.due,
+      type: item.type,
+    }));
+}
+
+async function postIdea(
+  payload: Record<string, unknown>,
+  { signal, timeoutMs = 12000 }: { signal?: AbortSignal; timeoutMs?: number } = {},
+): Promise<IdeaJson> {
+  const ac = new AbortController();
+  const timer = window.setTimeout(() => ac.abort(), timeoutMs);
+  const onAbort = () => ac.abort();
+  signal?.addEventListener("abort", onAbort, { once: true });
+  try {
+    const res = await fetch("/api/idea", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: ac.signal,
+    });
+    const json = (await res.json()) as IdeaJson;
+    if (!res.ok) throw new Error(json.error || `Idea ${res.status}`);
+    return json;
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      if (signal?.aborted) throw err;
+      throw new Error("Scoping timed out. Try again.");
+    }
+    if (err instanceof Error && err.message) throw err;
+    throw new Error("Lost the connection while scoping. Try again.");
+  } finally {
+    window.clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
+  }
+}
+
+async function pollIdea(agentId: string, runId: string, signal: AbortSignal): Promise<IdeaJson> {
+  const ac = new AbortController();
+  const timer = window.setTimeout(() => ac.abort(), 8000);
+  const onAbort = () => ac.abort();
+  signal.addEventListener("abort", onAbort, { once: true });
+  try {
+    const res = await fetch(`/api/idea?agentId=${encodeURIComponent(agentId)}&runId=${encodeURIComponent(runId)}`, {
+      signal: ac.signal,
+    });
+    const json = (await res.json()) as IdeaJson;
+    if (!res.ok) throw new Error(json.error || `Idea ${res.status}`);
+    return json;
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      if (signal.aborted) throw err;
+      throw new Error("Scoping timed out. Try again.");
+    }
+    if (err instanceof Error && err.message) throw err;
+    throw new Error("Lost the connection while scoping. Try again.");
+  } finally {
+    window.clearTimeout(timer);
+    signal.removeEventListener("abort", onAbort);
+  }
 }
 
 function sleep(ms: number, signal: AbortSignal) {
@@ -62,16 +131,42 @@ function sleep(ms: number, signal: AbortSignal) {
 }
 
 async function waitForRun(agentId: string, runId: string, signal: AbortSignal): Promise<IdeaJson> {
-  for (let i = 0; i < 90; i += 1) {
-    await sleep(i === 0 ? 1200 : 2000, signal);
-    const json = await postIdea({ action: "status", agentId, runId });
-    const status = String(json.status || "").toUpperCase();
-    if (status === "FINISHED" || json.done) return json;
-    if (status === "ERROR" || status === "CANCELLED" || status === "EXPIRED") {
-      throw new Error(json.reply || `Cursor ${status.toLowerCase()}`);
+  let lastError: Error | null = null;
+  let misses = 0;
+  for (let i = 0; i < 120; i += 1) {
+    if (i > 0) await sleep(500, signal);
+    try {
+      const json = await pollIdea(agentId, runId, signal);
+      misses = 0;
+      const status = String(json.status || "").toUpperCase();
+      if (status === "FINISHED" || json.done) return json;
+      if (status === "ERROR" || status === "CANCELLED" || status === "EXPIRED") {
+        throw new Error(json.reply || `Cursor ${status.toLowerCase()}`);
+      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") throw err;
+      misses += 1;
+      lastError = err instanceof Error ? err : new Error("Could not scope this idea");
+      if (misses >= 6) throw lastError;
     }
   }
-  throw new Error("Cursor took too long to scope this idea");
+  throw lastError || new Error("Cursor took too long to scope this idea");
+}
+
+async function startOrFollow(text: string, catalog: IdeaCatalogItem[], agentId: string | null, signal: AbortSignal) {
+  const payload = agentId
+    ? { action: "followup", agentId, text }
+    : { action: "start", text, catalog: compactForScope(text, catalog) };
+  try {
+    return await postIdea(payload, { signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    if (agentId) {
+      return await postIdea({ action: "start", text, catalog: compactForScope(text, catalog) }, { signal });
+    }
+    await sleep(700, signal);
+    return await postIdea(payload, { signal });
+  }
 }
 
 function ownerLabel(owner: Suggestion["owner"]) {
@@ -100,7 +195,13 @@ export function IdeaModal({
 }) {
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<ChatMsg[]>([{ role: "assistant", text: WELCOME }]);
-  const [agentId, setAgentId] = useState<string | null>(null);
+  const [agentId, setAgentId] = useState<string | null>(() => {
+    try {
+      return sessionStorage.getItem(SESSION_KEY);
+    } catch {
+      return null;
+    }
+  });
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
   const [busy, setBusy] = useState<"chat" | "create" | null>(null);
   const [created, setCreated] = useState<{ key: string; url: string } | null>(null);
@@ -139,11 +240,14 @@ export function IdeaModal({
     const ac = new AbortController();
     abortRef.current = ac;
     try {
-      const started = agentId
-        ? await postIdea({ action: "followup", agentId, text })
-        : await postIdea({ action: "start", text, catalog });
+      const started = await startOrFollow(text, catalog, agentId, ac.signal);
       if (!started.agentId || !started.runId) throw new Error("Cursor did not start a chat session");
       setAgentId(started.agentId);
+      try {
+        sessionStorage.setItem(SESSION_KEY, started.agentId);
+      } catch {
+        /* ignore */
+      }
       const done = await waitForRun(started.agentId, started.runId, ac.signal);
       const reply = done.reply?.trim() || (done.suggestion ? "Suggested outcome is ready to confirm." : "I need a bit more to scope a ticket.");
       setMessages((prev) => [...prev, { role: "assistant", text: reply }]);
@@ -213,7 +317,9 @@ export function IdeaModal({
               {msg.text}
             </p>
           ))}
-          {busy === "chat" && <p className="idea-bubble assistant thinking">Scoping against the live PGL board…</p>}
+          {busy === "chat" && (
+            <p className="idea-bubble assistant thinking">Scoping against the live PGL board… this should only take a few seconds.</p>
+          )}
         </div>
 
         {suggestion && (

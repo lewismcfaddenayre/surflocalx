@@ -1,6 +1,8 @@
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 
+export const maxDuration = 60;
+
 const CURSOR = "https://api.cursor.com";
 const AGENT_RE = /^bc-[a-z0-9-]+$/i;
 const RUN_RE = /^run-[a-z0-9-]+$/i;
@@ -8,6 +10,10 @@ const KEY_RE = /^PGL-\d+$/i;
 const SPRINT_EPICS = new Set(["PGL-202", "PGL-203", "PGL-204"]);
 const CLOCK = { start: "2026-09-07", end: "2026-09-27" };
 const DONE = new Set(["FINISHED", "ERROR", "CANCELLED", "EXPIRED"]);
+const FAST_MODEL = {
+  id: process.env.CURSOR_IDEA_MODEL || "composer-2.5",
+  params: [{ id: "fast", value: "true" }],
+};
 
 function loadDotEnv() {
   for (const name of [".env.local", ".env"]) {
@@ -67,13 +73,24 @@ function cursorHeaders() {
   };
 }
 
+export function pickCatalog(idea, raw) {
+  const list = Array.isArray(raw) ? raw : [];
+  const words = String(idea || "").toLowerCase().match(/[a-z0-9]{3,}/g) || [];
+  function score(i) {
+    const hay = `${i.key || ""} ${i.summary || ""} ${i.track || ""} ${i.parent || ""}`.toLowerCase();
+    let s = String(i.type || "") === "epic" ? 1 : 0;
+    for (const w of words) if (hay.includes(w)) s += 2;
+    return s;
+  }
+  return [...list].sort((a, b) => score(b) - score(a)).slice(0, 80);
+}
+
 function compactCatalog(raw) {
   const list = Array.isArray(raw) ? raw : [];
   return list
-    .slice(0, 240)
     .map((i) => {
       const key = String(i.key || "").slice(0, 12);
-      const summary = String(i.summary || "").replace(/\s+/g, " ").slice(0, 90);
+      const summary = String(i.summary || "").replace(/\s+/g, " ").slice(0, 70);
       const parent = i.parent ? ` ${i.parent}` : "";
       const track = i.track ? ` [${i.track}]` : "";
       const when = i.start || i.due ? ` ${i.start || i.due}${i.due && i.due !== i.start ? "→" + i.due : ""}` : "";
@@ -129,7 +146,7 @@ export function parseTicket(text) {
 }
 
 function scopingPrompt({ idea, catalog }) {
-  const board = compactCatalog(catalog);
+  const board = compactCatalog(pickCatalog(idea, catalog));
   return `You are scoping an idea for the SurfLocal (SLX) Production-Go-Live board (Jira project PGL).
 
 This is a planning conversation only. Do not write application code, do not edit files, and do not create a Jira issue yourself. The dashboard will create the ticket only after the human confirms your suggested outcome.
@@ -138,7 +155,7 @@ Clock: ${CLOCK.start} to ${CLOCK.end} (Sprint 1 7–13 Sep, Sprint 2 14–20 Sep
 People: Lewis McFadden (lewis), Alok Ranjan (alok).
 Epics include PGL-1..PGL-25 (tracks), PGL-202/203/204 (week epics — do not parent new work on those).
 
-Existing PGL work (do not duplicate; relate if overlapping):
+Closest existing PGL work (do not duplicate; relate if overlapping):
 ${board || "(catalog empty)"}
 
 Human idea:
@@ -163,31 +180,44 @@ Process:
 }
 \`\`\`
 
-Keep the chat reply human: first the suggested outcome in plain language, then the ticket block. If they ask to change dates or owner, revise the suggestion and emit a new ticket block. Never claim the Jira issue already exists.`;
+Keep the chat reply human: first the suggested outcome in plain language, then the ticket block. If they ask to change dates or owner, revise the suggestion and emit a new ticket block. Never claim the Jira issue already exists. Be concise.`;
 }
 
-async function cursorFetch(path, { method = "GET", body } = {}) {
+async function cursorFetch(path, { method = "GET", body, timeoutMs } = {}) {
   const headers = cursorHeaders();
   if (!headers) return { status: 503, json: { error: "Cursor API key is not configured on the server" } };
-  const res = await fetch(`${CURSOR}${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const text = await res.text();
-  let json = {};
+  const ms = timeoutMs ?? (Number(process.env.IDEA_CURSOR_TIMEOUT_MS) || 8000);
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), ms);
   try {
-    json = text ? JSON.parse(text) : {};
-  } catch {
-    json = { error: text.slice(0, 400) };
+    const res = await fetch(`${CURSOR}${path}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: ac.signal,
+    });
+    const text = await res.text();
+    let json = {};
+    try {
+      json = text ? JSON.parse(text) : {};
+    } catch {
+      json = { error: text.slice(0, 400) };
+    }
+    if (!res.ok) {
+      return {
+        status: res.status,
+        json: { error: json.message || json.error || `Cursor ${res.status}`, detail: text.slice(0, 400) },
+      };
+    }
+    return { status: res.status, json };
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      return { status: 504, json: { error: "Cursor timed out. Try scoping again." } };
+    }
+    return { status: 502, json: { error: "Could not reach Cursor" } };
+  } finally {
+    clearTimeout(timer);
   }
-  if (!res.ok) {
-    return {
-      status: res.status,
-      json: { error: json.message || json.error || `Cursor ${res.status}`, detail: text.slice(0, 400) },
-    };
-  }
-  return { status: res.status, json };
 }
 
 export async function handleIdeaRequest({ method, body }) {
@@ -260,7 +290,7 @@ export async function handleIdeaRequest({ method, body }) {
     if (!AGENT_RE.test(agentId)) return { status: 400, json: { error: "Missing chat session" } };
     const run = await cursorFetch(`/v1/agents/${agentId}/runs`, {
       method: "POST",
-      body: { prompt: { text: text.slice(0, 4000) }, mode: "plan" },
+      body: { prompt: { text: text.slice(0, 4000) }, mode: "plan", model: FAST_MODEL },
     });
     if (run.status >= 400) return run;
     const runId = run.json.run?.id || run.json.id;
@@ -273,7 +303,8 @@ export async function handleIdeaRequest({ method, body }) {
     body: {
       name: `PGL idea ${new Date().toISOString().slice(0, 16)}`,
       mode: "plan",
-      prompt: { text: scopingPrompt({ idea: text, catalog: payload.catalog }) },
+      model: FAST_MODEL,
+      prompt: { text: scopingPrompt({ idea: text, catalog: pickCatalog(text, payload.catalog) }) },
     },
   });
   if (started.status >= 400) return started;
@@ -307,5 +338,6 @@ export default async function handler(req, res) {
     method: req.method || "POST",
     body,
   });
+  res.setHeader("Cache-Control", "no-store");
   res.status(result.status).json(result.json);
 }
